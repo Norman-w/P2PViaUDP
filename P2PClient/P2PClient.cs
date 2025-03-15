@@ -93,6 +93,13 @@ public class P2PClient
 
     private async Task RequestStunServerAsync()
     {
+        // 如果IP设置的不是IP的格式(域名)要解析成IP
+        var domain = _settings.STUNServerIP;
+        if (!IPAddress.TryParse(domain, out var _))
+        {
+            var ip = await Dns.GetHostAddressesAsync(domain);
+            _settings.STUNServerIP = ip[0].ToString();
+        }
         var serverEndPoint = new IPEndPoint(
             IPAddress.Parse(_settings.STUNServerIP),
             _settings.STUNServerPort
@@ -123,6 +130,13 @@ public class P2PClient
     {
         try
         {
+            //如果配置的TURN服务器IP不是IP格式的话要解析成IP
+            var domain = _settings.TURNServerIP;
+            if (!IPAddress.TryParse(domain, out var _))
+            {
+                var ip = await Dns.GetHostAddressesAsync(domain);
+                _settings.TURNServerIP = ip[0].ToString();
+            }
             if (_myEndPointFromStunReply == null)
             {
                 throw new Exception("STUN响应为空");
