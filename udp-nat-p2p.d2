@@ -1,0 +1,184 @@
+direction: right
+
+# 定义样式
+style: {
+  fill: "#f5f5f5"
+  stroke: "#333333"
+  font-size: 14
+}
+
+# 主要组件
+client1: {
+  label: 客户端A\n(192.168.1.2:3478)\nNAT映射: 11.22.33.44:5566
+  shape: person
+  style.fill: "#AED6F1"
+}
+
+client2: {
+  label: 客户端B\n(192.168.2.3:3479)\nNAT映射: 22.33.44.55:6677
+  shape: person
+  style.fill: "#AED6F1"
+}
+
+nat1: {
+  label: NAT设备A
+  shape: diamond
+  style.fill: "#D5F5E3"
+}
+
+nat2: {
+  label: NAT设备B
+  shape: diamond
+  style.fill: "#D5F5E3"
+}
+
+stun: {
+  label: STUN服务器
+  shape: hexagon
+  style.fill: "#F9E79F"
+}
+
+relay: {
+  label: 信令服务器\n(TURN服务器)
+  shape: hexagon
+  style.fill: "#F5B7B1"
+}
+
+# 连接关系
+client1 -> nat1: "内网通信\n192.168.1.2:3478" {
+  style.stroke: "#333333"
+  style.stroke-dash: 2
+}
+
+client2 -> nat2: "内网通信\n192.168.2.3:3479" {
+  style.stroke: "#333333"
+  style.stroke-dash: 2
+}
+
+nat1 -> stun: "NAT-A到STUN\n11.22.33.44:5566" {
+  style.stroke: "#333333"
+  style.stroke-dash: 2
+}
+
+nat2 -> stun: "NAT-B到STUN\n22.33.44.55:6677" {
+  style.stroke: "#333333"
+  style.stroke-dash: 2
+}
+
+# NAT检测流程
+client1 -> stun: "1. STUN绑定请求\n(0x0001: Binding Request)" {
+  style.animated: true
+  style.stroke: "#0000FF"
+}
+
+stun -> client1: "2. 返回A的公网地址\n(0x0101: Success, 映射地址11.22.33.44:5566)" {
+  style.animated: true
+  style.stroke: "#0000FF"
+}
+
+client2 -> stun: "3. STUN绑定请求\n(0x0001: Binding Request)" {
+  style.animated: true
+  style.stroke: "#00FF00"
+}
+
+stun -> client2: "4. 返回B的公网地址\n(0x0101: Success, 映射地址22.33.44.55:6677)" {
+  style.animated: true
+  style.stroke: "#00FF00"
+}
+
+# 信令交换阶段
+client1 -> relay: "5. 注册并发送连接信息\n{type: 'register', id: 'A', addr: '11.22.33.44:5566'}" {
+  style.animated: true
+  style.stroke: "#800080"
+}
+
+client2 -> relay: "6. 注册并发送连接信息\n{type: 'register', id: 'B', addr: '22.33.44.55:6677'}" {
+  style.animated: true
+  style.stroke: "#800080"
+}
+
+relay -> client1: "7. 发送B的连接信息\n{type: 'peer_info', peer: 'B', addr: '22.33.44.55:6677'}" {
+  style.animated: true
+  style.stroke: "#800080"
+}
+
+relay -> client2: "8. 发送A的连接信息\n{type: 'peer_info', peer: 'A', addr: '11.22.33.44:5566'}" {
+  style.animated: true
+  style.stroke: "#800080"
+}
+
+# UDP打洞过程
+client1 -> nat1: "9a. 发送UDP打洞包到B\n目标: 22.33.44.55:6677" {
+  style.animated: true
+  style.stroke: "#FF0000"
+}
+
+nat1 -> client2: "9b. NAT-A创建映射\n源: 11.22.33.44:5566" {
+  style.animated: true
+  style.stroke: "#FF0000"
+  style.stroke-dash: 5
+}
+
+client2 -> nat2: "9c. 发送UDP打洞包到A\n目标: 11.22.33.44:5566" {
+  style.animated: true
+  style.stroke: "#FF0000"
+}
+
+nat2 -> client1: "9d. NAT-B创建映射\n源: 22.33.44.55:6677" {
+  style.animated: true
+  style.stroke: "#FF0000"
+  style.stroke-dash: 5
+}
+
+# 备选方案
+client1 -> relay: "10a. P2P失败，请求TURN中继\n(0x0003: Allocate Request)" {
+  style.animated: true
+  style.stroke: "#FFA500"
+  style.stroke-dash: 3
+}
+
+relay -> client2: "10b. TURN中继转发数据\n(0x0016: Data Indication)" {
+  style.animated: true
+  style.stroke: "#FFA500"
+  style.stroke-dash: 3
+}
+
+explanation: |
+  NAT穿透流程详细说明:
+  1. STUN探测阶段：
+     - 客户端A和B分别向STUN服务器发送请求，获取自己的公网IP和端口
+     - STUN服务器返回各自的NAT映射地址
+  
+  2. 信令交换阶段：
+     - 客户端通过可信的信令服务器交换各自的连接信息
+     - 信令服务器负责转发双方的地址信息，确保双方都知道对方的公网地址
+  
+  3. UDP打洞原理：
+     - UDP虽然是无连接的，但NAT设备会维护UDP会话表
+     - 当客户端发送UDP包时，NAT会创建一个映射表项
+     - 映射表项包含：内网IP:端口 <-> 公网IP:端口
+     - 关键点：即使A无法直接访问B，但A发包到B时会在A的NAT上创建映射
+     - 当B发包给A时，如果A的NAT已有相应映射，则可以通过该映射转发给A
+     - 这就是为什么需要双方同时发包：为对方打开自己NAT的"洞"
+  
+  4. 单向可达情况处理：
+     - 假设A可以访问B，但B不能访问A
+     - A首先发包到B，在A的NAT上创建映射
+     - B虽然不能直接访问A，但可以发包到A的公网地址
+     - 由于A之前的发包已经在自己的NAT上创建了映射
+     - B的包可以通过这个已存在的映射到达A
+     - 这个过程就像"打洞"，为B的数据包开辟了一条通道
+  
+  5. TURN回退方案：
+     - 如果NAT类型太严格（如对称型NAT）导致打洞失败
+     - 或者防火墙完全阻止P2P连接
+     - 则使用TURN服务器中继所有数据
+  |
+
+udp_note: |
+  UDP打洞关键点:
+  1. NAT映射是动态创建的
+  2. 首次发包会在NAT上开"洞"
+  3. 映射表项有超时机制
+  4. 需要定期发送心跳包维持映射
+  | 
