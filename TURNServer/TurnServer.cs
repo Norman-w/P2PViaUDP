@@ -79,6 +79,10 @@ public class TurnServer
 
     private void BroadcastToGroup(TURNRegisterMessage newClient, List<TURNClient> group)
     {
+        #region 广播到组内其他客户端
+
+        Console.WriteLine($"向组内其他客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
+
         foreach (var client in group.Where(c => c.Guid != newClient.Guid))
         {
             try
@@ -99,5 +103,35 @@ public class TurnServer
                 Console.WriteLine($"广播失败: {ex.Message}");
             }
         }
+
+        #endregion
+
+        #region 向这个客户端发送组内其他客户端信息
+
+        Console.WriteLine($"向新客户端 {newClient.Guid} 发送组内其他客户端信息, 共 {group.Count - 1} 个");
+        
+        var thisClient = group.First(c => c.Guid == newClient.Guid);
+        foreach (var client in group.Where(c => c.Guid != newClient.Guid))
+        {
+            try
+            {
+                var broadcast = new TURNBroadcastMessage
+                {
+                    EndPoint = client.EndPointFromTURN,
+                    Guid = client.Guid,
+                    GroupGuid = newClient.GroupGuid
+                };
+
+                var data = broadcast.ToBytes();
+                _udpServer.Send(data, data.Length, thisClient.EndPointFromTURN);
+                Console.WriteLine($"广播已发送到 {thisClient.Guid}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"广播失败: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }

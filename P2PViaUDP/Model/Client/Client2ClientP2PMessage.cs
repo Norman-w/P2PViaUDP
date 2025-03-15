@@ -6,7 +6,7 @@ namespace P2PViaUDP.Model.Client;
 /// <summary>
 /// 客户端到客户端的P2P打洞消息
 /// </summary>
-public class Client2ClientP2PHolePunchingMessage
+public class Client2ClientP2PHolePunchingRequestMessage
 {
 	private static MessageType MessageType => MessageType.P2PHolePunchingRequest;
 	private static uint DefaultMessageLength => 
@@ -22,19 +22,19 @@ public class Client2ClientP2PHolePunchingMessage
 	//= 80
 	
 	/// <summary>
-	/// 谁发起的
+	/// 谁发起的打洞,并不是本条消息是谁发送的
 	/// </summary>
 	public IPEndPoint SourceEndPoint { get; set; }
 	/// <summary>
-	/// 谁接收
+	/// 谁接收打洞请求,并不是本条消息是谁接收的
 	/// </summary>
 	public IPEndPoint DestinationEndPoint { get; set; }
 	/// <summary>
-	/// 源客户端ID
+	/// 源客户端ID,发起打洞的客户端ID
 	/// </summary>
 	public Guid SourceClientId { get; set; }
 	/// <summary>
-	/// 目标客户端ID
+	/// 目标客户端ID,接收打洞请求的客户端ID
 	/// </summary>
 	public Guid DestinationClientId { get; set; }
 	/// <summary>
@@ -61,7 +61,7 @@ public class Client2ClientP2PHolePunchingMessage
 		return bytes;
 	}
 
-	public static Client2ClientP2PHolePunchingMessage FromBytes(byte[] bytes)
+	public static Client2ClientP2PHolePunchingRequestMessage FromBytes(byte[] bytes)
 	{
 		if (bytes.Length < DefaultMessageLength)
 		{
@@ -80,7 +80,7 @@ public class Client2ClientP2PHolePunchingMessage
 		var destinationClientId = new Guid(bytes.Skip(36).Take(16).ToArray());
 		var groupId = new Guid(bytes.Skip(52).Take(16).ToArray());
 		var sendTime = new DateTime(BitConverter.ToInt64(bytes, 68));
-		return new Client2ClientP2PHolePunchingMessage
+		return new Client2ClientP2PHolePunchingRequestMessage
 		{
 			SourceEndPoint = sourceEndPoint,
 			DestinationEndPoint = destinationEndPoint,

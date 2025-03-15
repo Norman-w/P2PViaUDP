@@ -231,7 +231,7 @@ public class P2PClient
         try
         {
             // 从字节数组中解析P2P打洞消息
-            var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingMessage.FromBytes(data);
+            var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingRequestMessage.FromBytes(data);
             Console.WriteLine($"收到P2P打洞消息，来自: {holePunchingMessageFromOtherClient.SourceEndPoint}");
             // 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
             var peerId = holePunchingMessageFromOtherClient.SourceClientId;
@@ -264,7 +264,7 @@ public class P2PClient
     }
 
     private void ContinuousSendP2PHeartbeatMessagesAsync(
-        Client2ClientP2PHolePunchingMessage holePunchingMessageFromOtherClient)
+        Client2ClientP2PHolePunchingRequestMessage holePunchingMessageFromOtherClient)
     {
         Task.Run(async () =>
         {
@@ -306,7 +306,7 @@ public class P2PClient
                 Console.WriteLine("收到自己的广播消息，忽略");
                 return;
             }
-            var holePunchingMessage = new Client2ClientP2PHolePunchingMessage
+            var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
             {
                 SourceEndPoint = _myEndPointFromStunReply,
                 DestinationEndPoint = broadcastMessage.EndPoint, DestinationClientId = broadcastMessage.Guid
@@ -337,7 +337,7 @@ public class P2PClient
         }
     }
 
-    private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingMessage message)
+    private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
     {
         if (_myEndPointFromStunReply == null)
         {
