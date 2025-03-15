@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.InteropServices;
 
 namespace P2PViaUDP.Model.Client;
 
@@ -7,6 +8,19 @@ namespace P2PViaUDP.Model.Client;
 /// </summary>
 public class Client2ClientP2PHolePunchingMessage
 {
+	private static MessageType MessageType => MessageType.P2PHolePunchingRequest;
+	private static uint DefaultMessageLength => 
+	4 + // MessageType
+	4 + // SourceEndPoint.Address
+	4 + // SourceEndPoint.Port
+	4 + // DestinationEndPoint.Address
+	4 + // DestinationEndPoint.Port
+	16 + // SourceClientId
+	16 + // DestinationClientId
+	16 + // GroupId
+	8; // SendTime
+	//= 80
+	
 	/// <summary>
 	/// 谁发起的
 	/// </summary>
@@ -34,6 +48,7 @@ public class Client2ClientP2PHolePunchingMessage
 	public byte[] ToBytes()
 	{
 		var bytesList = new List<byte>();
+		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
 		bytesList.AddRange(SourceEndPoint.Address.GetAddressBytes());
 		bytesList.AddRange(BitConverter.GetBytes(SourceEndPoint.Port));
 		bytesList.AddRange(DestinationEndPoint.Address.GetAddressBytes());
@@ -42,16 +57,29 @@ public class Client2ClientP2PHolePunchingMessage
 		bytesList.AddRange(DestinationClientId.ToByteArray());
 		bytesList.AddRange(GroupId.ToByteArray());
 		bytesList.AddRange(BitConverter.GetBytes(SendTime.Ticks));
-		return bytesList.ToArray();
+		var bytes = bytesList.ToArray();
+		return bytes;
 	}
+
 	public static Client2ClientP2PHolePunchingMessage FromBytes(byte[] bytes)
 	{
-		var sourceEndPoint = new IPEndPoint(new IPAddress(bytes.Take(4).ToArray()), BitConverter.ToUInt16(bytes.Skip(4).Take(2).ToArray()));
-		var destinationEndPoint = new IPEndPoint(new IPAddress(bytes.Skip(6).Take(4).ToArray()), BitConverter.ToUInt16(bytes.Skip(10).Take(2).ToArray()));
-		var sourceClientId = new Guid(bytes.Skip(12).Take(16).ToArray());
-		var destinationClientId = new Guid(bytes.Skip(28).Take(16).ToArray());
-		var groupId = new Guid(bytes.Skip(44).Take(16).ToArray());
-		var sendTime = new DateTime(BitConverter.ToInt64(bytes.Skip(60).Take(8).ToArray()));
+		if (bytes.Length < DefaultMessageLength)
+		{
+			throw new ArgumentException("字节数组长度不足");
+		}
+		var messageType = (MessageType)BitConverter.ToInt32(bytes, 0);
+		if (messageType != MessageType.P2PHolePunchingRequest)
+		{
+			throw new ArgumentException("消息类型不匹配");
+		}
+		var sourceEndPoint =
+			new IPEndPoint(new IPAddress(bytes.Skip(4).Take(4).ToArray()), BitConverter.ToInt32(bytes, 8));
+		var destinationEndPoint =
+			new IPEndPoint(new IPAddress(bytes.Skip(12).Take(4).ToArray()), BitConverter.ToInt32(bytes, 16));
+		var sourceClientId = new Guid(bytes.Skip(20).Take(16).ToArray());
+		var destinationClientId = new Guid(bytes.Skip(36).Take(16).ToArray());
+		var groupId = new Guid(bytes.Skip(52).Take(16).ToArray());
+		var sendTime = new DateTime(BitConverter.ToInt64(bytes, 68));
 		return new Client2ClientP2PHolePunchingMessage
 		{
 			SourceEndPoint = sourceEndPoint,
