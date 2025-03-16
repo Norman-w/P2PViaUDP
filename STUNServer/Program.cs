@@ -240,20 +240,6 @@ void ReceiveCallback(IAsyncResult ar)
 	}
 }
 
-void CleanupInactiveClients(object? state)
-{
-	var timeoutThreshold = DateTime.UtcNow.AddMinutes(-10); // 10分钟超时
-	var inactiveClients = clientDict.Where(kvp => kvp.Value.LastActivity < timeoutThreshold).ToList();
-
-	foreach (var client in inactiveClients)
-	{
-		if (clientDict.TryRemove(client.Key, out _))
-		{
-			Console.WriteLine($"已移除超时客户端: {client.Key}");
-		}
-	}
-}
-
 // 优雅关闭服务器
 Console.CancelKeyPress += (_, e) =>
 {
@@ -279,6 +265,20 @@ foreach (var additionalServer in additionalServers)
 
 cleanupTimer.Dispose();
 return;
+
+void CleanupInactiveClients(object? state)
+{
+	var timeoutThreshold = DateTime.UtcNow.AddMinutes(-10); // 10分钟超时
+	var inactiveClients = clientDict.Where(kvp => kvp.Value.LastActivity < timeoutThreshold).ToList();
+
+	foreach (var client in inactiveClients)
+	{
+		if (clientDict.TryRemove(client.Key, out _))
+		{
+			Console.WriteLine($"已移除超时客户端: {client.Key}");
+		}
+	}
+}
 
 void CountAndOutputClientIPAndPort(StunClient? stunClient)
 {
