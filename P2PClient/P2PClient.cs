@@ -8,55 +8,9 @@ using P2PViaUDP.Model.TURN;
 
 namespace P2PClient;
 
-/// <summary>
-/// 跟我相互打洞的客户端类
-/// </summary>
-public partial class PeerClient
-{
-    public PeerClient(IPEndPoint endPoint)
-    {
-        EndPoint = endPoint;
-    }
-
-    /// <summary>
-    /// 客户端的Guid
-    /// </summary>
-    public Guid Guid { get; set; }
-    /// <summary>
-    /// 他的公网信息
-    /// </summary>
-    public IPEndPoint EndPoint { get; set; }
-    /// <summary>
-    /// 最后一次我发给他的心跳时间,如果还没发过则为null
-    /// </summary>
-    public DateTime? LastHeartbeatToHim { get; set; }
-    /// <summary>
-    /// 最后一次他发给我的心跳时间,如果还没收到过则为null
-    /// </summary>
-    public DateTime? LastHeartbeatFromHim { get; set; }
-    /// <summary>
-    /// 最后一次我收到他的时间,如果还没收到过则为null
-    /// </summary>
-    public DateTime? LastReceiveTime { get; set; }
-    /// <summary>
-    /// 最后一次我发送给他的时间,如果还没发送过则为null
-    /// </summary>
-    public DateTime? LastSendTime { get; set; }
-    /// <summary>
-    /// 首次P2P可用时间,我给他发过消息并且他也给我回过心跳的第一次设置一整个时间
-    /// </summary>
-    public DateTime? FirstP2PAvailableTime { get; set; }
-}
-
-public partial class PeerClient
-{
-    /// <summary>
-    /// 判断是否已经建立了P2P
-    /// </summary>
-    public bool IsP2PHasBeenEstablished => FirstP2PAvailableTime != null;
-}
 public class P2PClient
 {
+    #region 私有字段
     /// <summary>
     /// 跟我打洞的客户端集合,key是对方的Guid,value是对方的信息以及和我的相关交互信息
     /// </summary>
@@ -66,6 +20,10 @@ public class P2PClient
     private IPEndPoint? _myEndPointFromStunReply;
     private readonly Guid _clientId = Guid.NewGuid();
     private bool _isRunning;
+
+    #endregion
+
+    #region 启动和停止
 
     public async Task StartAsync()
     {
@@ -106,6 +64,11 @@ public class P2PClient
         _udpClient.Close();
     }
 
+    #endregion
+
+    #region STUN 流程控制
+    
+    #region 请求STUN服务器
     private async Task RequestStunServerAsync()
     {
         // 如果IP设置的不是IP的格式(域名)要解析成IP
@@ -163,7 +126,13 @@ public class P2PClient
 
         #endregion
     }
+    #endregion
 
+    #endregion
+
+    #region TURN 流程控制
+    
+    #region 注册到TURN服务器
     private async Task RegisterToTurnServerAsync()
     {
         try
@@ -206,7 +175,11 @@ public class P2PClient
             throw;
         }
     }
+    #endregion
 
+    #endregion
+
+    #region 开始监听自己的端口
     private async Task StartListeningAsync()
     {
         while (_isRunning)
@@ -222,7 +195,13 @@ public class P2PClient
             }
         }
     }
+    #endregion
 
+    #region In 处理消息
+
+    #region 入口(消息类型路由)
+    
+    #region 处理接收到的消息总入口
     private async Task ProcessReceivedMessageAsync(byte[] data)
     {
         Console.WriteLine($"收到消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
@@ -250,7 +229,13 @@ public class P2PClient
                 break;
         }
     }
+    #endregion
 
+    #endregion
+
+    #region 处理具体类型的消息
+    
+    #region 处理接收到的心跳消息
     private Task ProcessP2PHeartbeatMessageAsync(byte[] data)
     {
         try
@@ -277,7 +262,9 @@ public class P2PClient
 
         return Task.CompletedTask;
     }
-
+    #endregion
+    
+    #region 处理接收到的P2P打洞消息
     private Task ProcessP2PHolePunchingMessageAsync(byte[] data)
     {
         try
@@ -314,34 +301,9 @@ public class P2PClient
 
         return Task.CompletedTask;
     }
-
-    private void ContinuousSendP2PHeartbeatMessagesAsync(
-        Client2ClientP2PHolePunchingRequestMessage holePunchingMessageFromOtherClient)
-    {
-        Task.Run(async () =>
-        {
-            Console.WriteLine("开始发送P2P打洞消息");
-            var sentTimes = 0;
-            while (_isRunning)
-            {
-                sentTimes++;
-                if (sentTimes > 2000)
-                {
-                    Console.WriteLine("已发送3次心跳包，停止发送");
-                    break;
-                }
-
-                var heartbeatMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P HEARTBEAT {sentTimes}");
-                //发送
-                var heartbeatBytes = heartbeatMessage.ToBytes();
-                await _udpClient.SendAsync(heartbeatBytes, heartbeatBytes.Length, holePunchingMessageFromOtherClient.SourceEndPoint);
-                Console.WriteLine($"已发送心跳包到: {holePunchingMessageFromOtherClient.SourceEndPoint}, 第{sentTimes}次");
-                //延迟2秒继续发
-                await Task.Delay(2000);
-            }
-        });
-    }
-
+    #endregion
+    
+    #region 处理接收到的TURN广播消息
     private async Task ProcessBroadcastMessageAsync(byte[] data)
     {
         if (_myEndPointFromStunReply == null)
@@ -388,7 +350,43 @@ public class P2PClient
             throw;
         }
     }
+    #endregion
 
+    #endregion
+    #endregion
+
+    #region Out 发送消息
+    
+    #region 持续发送P2P心跳包
+    private void ContinuousSendP2PHeartbeatMessagesAsync(
+        Client2ClientP2PHolePunchingRequestMessage holePunchingMessageFromOtherClient)
+    {
+        Task.Run(async () =>
+        {
+            Console.WriteLine("开始发送P2P打洞消息");
+            var sentTimes = 0;
+            while (_isRunning)
+            {
+                sentTimes++;
+                if (sentTimes > 2000)
+                {
+                    Console.WriteLine("已发送3次心跳包，停止发送");
+                    break;
+                }
+
+                var heartbeatMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P HEARTBEAT {sentTimes}");
+                //发送
+                var heartbeatBytes = heartbeatMessage.ToBytes();
+                await _udpClient.SendAsync(heartbeatBytes, heartbeatBytes.Length, holePunchingMessageFromOtherClient.SourceEndPoint);
+                Console.WriteLine($"已发送心跳包到: {holePunchingMessageFromOtherClient.SourceEndPoint}, 第{sentTimes}次");
+                //延迟2秒继续发
+                await Task.Delay(2000);
+            }
+        });
+    }
+    #endregion
+    
+    #region 发送P2P打洞消息
     private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
     {
         if (_myEndPointFromStunReply == null)
@@ -416,4 +414,7 @@ public class P2PClient
             }
         }
     }
+    #endregion
+
+    #endregion
 }
