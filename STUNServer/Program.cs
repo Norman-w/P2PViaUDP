@@ -4,12 +4,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using P2PViaUDP;
 using P2PViaUDP.Model;
 using STUNServer;
 
 Console.WriteLine("Hello, World!");
-
 
 
 /*
@@ -26,11 +26,13 @@ var settings = new Settings();
 
 
 #region 如果是编译器附加,则设置STUNServerIP为本地IP
+
 if (Debugger.IsAttached)
 {
 	Console.WriteLine("调试模式已启用,将STUN服务器IP设置为本地IP");
 	settings.STUNServerIP = "127.0.0.1";
 }
+
 #endregion
 
 #region 如果自己的IP地址是域名,则解析为IP地址
@@ -55,6 +57,7 @@ else
 }
 
 #endregion
+
 //创建一个UDP服务器,绑定默认的初始化端口
 var server = new UdpClient(settings.STUNServerPort);
 //额外的STUN服务器端口
@@ -66,10 +69,12 @@ foreach (var port in settings.STUNServerAdditionalPorts)
 	additionalServers.Add(port, additionalServer);
 	Console.WriteLine($"额外的STUN服务器端口已启动: {port}");
 }
+
 var clientDict = new ConcurrentDictionary<Guid, StunClient>();
 
 // 添加服务器启动确认信息
-Console.WriteLine($"UDP服务器已启动，正在监听端口: {settings.STUNServerPort} 额外端口: {string.Join(",", settings.STUNServerAdditionalPorts)}");
+Console.WriteLine(
+	$"UDP服务器已启动，正在监听端口: {settings.STUNServerPort} 额外端口: {string.Join(",", settings.STUNServerAdditionalPorts)}");
 
 
 // 添加定期清理超时客户端的定时器
@@ -82,7 +87,7 @@ server.BeginReceive(ReceiveCallback, server);
 // {
 // 	additionalServer.Value.BeginReceive(ReceiveCallback, additionalServer);
 // }
-for(var i = 0; i < additionalServers.Count; i++)
+for (var i = 0; i < additionalServers.Count; i++)
 {
 	additionalServers.ElementAt(i).Value.BeginReceive(ReceiveCallback, additionalServers.ElementAt(i).Value);
 }
@@ -92,116 +97,120 @@ for(var i = 0; i < additionalServers.Count; i++)
 void ReceiveCallback(IAsyncResult ar)
 {
 	UdpClient? serverUdpClient;
-	try { serverUdpClient = (UdpClient?)ar.AsyncState; }catch { serverUdpClient = null; }
+	try
+	{
+		serverUdpClient = (UdpClient?)ar.AsyncState;
+	}
+	catch
+	{
+		serverUdpClient = null;
+	}
+
 	if (serverUdpClient == null)
 	{
 		// throw new Exception("在ReceiveCallback无法获取服务器实例");
 		Console.WriteLine($"在ReceiveCallback无法获取服务器实例,可能是额外的服务器");
 		return;
 	}
+
 	try
 	{
 		var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
-		
-		Console.WriteLine($"收到数据！来自: {serverUdpClient.Client.LocalEndPoint}");  // 添加这行
+
+		Console.WriteLine($"收到数据！来自: {serverUdpClient.Client.LocalEndPoint}"); // 添加这行
 		var receivedBytes = serverUdpClient.EndReceive(ar, ref remoteEndPoint);
-        
-		// Console.WriteLine($"收到数据！来自: {remoteEndPoint}");  // 添加这行
+
+		// Console.WriteLine($"收到数据！来自: {remoteEndPoint}");
 		// Console.WriteLine($"收到原始数据长度: {receivedBytes.Length}");
 		// Console.WriteLine($"原始数据: {BitConverter.ToString(receivedBytes)}");
 		// Console.WriteLine($"尝试转换为文本: {System.Text.Encoding.UTF8.GetString(receivedBytes)}");// 验证远程终端点
-		if(remoteEndPoint == null)
+		if (remoteEndPoint == null)
 		{
 			throw new Exception("远程终端点为空");
 		}
-		if (!remoteEndPoint.Address.Equals(IPAddress.Any))
-		{
-			Console.WriteLine($"收到来自 {remoteEndPoint.Address}:{remoteEndPoint.Port} 的连接");
-		}
-		else if (remoteEndPoint.Address.Equals(IPAddress.Any))
-		{
-			Console.WriteLine($"回环连接");
-		}
+
+		Console.WriteLine(!remoteEndPoint.Address.Equals(IPAddress.Any)
+			? $"收到来自 {remoteEndPoint.Address}:{remoteEndPoint.Port} 的连接"
+			: "收到来自未知地址的连接");
 
 		var message = StunMessage.FromBytes(receivedBytes);
 		message.ClientEndPoint = remoteEndPoint;
-		if (message.MessageType == MessageType.StunRequest)
+		switch (message.MessageType)
 		{
-			var client = new StunClient(message.ClientId, remoteEndPoint);
-			// 使用线程安全的字典操作
-			if (clientDict.TryAdd(client.Id, client))
+			case MessageType.StunRequest:
 			{
-				Console.WriteLine($"新客户端已连接: {client.Id} - {remoteEndPoint}");
-
-				var responseMessage = new StunMessage(
-					MessageType.StunResponse,
-					MessageSource.Server,
-					client.Id,
-					new IPEndPoint(
-						IPAddress.Parse(settings.STUNServerIP),
-						settings.STUNServerPort
-					))
+				var client = new StunClient(message.ClientId, remoteEndPoint);
+				// 使用线程安全的字典操作
+				if (clientDict.TryAdd(client.Id, client))
 				{
-					ClientEndPoint = remoteEndPoint
-				};
+					Console.WriteLine($"新客户端已连接: {client.Id} - {remoteEndPoint}");
 
-				var sendingBytes = responseMessage.ToBytes();
-				var sendingBytesLength = sendingBytes.Length;
+					var responseMessage = new StunMessage(
+						MessageType.StunResponse,
+						MessageSource.Server,
+						client.Id,
+						new IPEndPoint(
+							IPAddress.Parse(settings.STUNServerIP),
+							settings.STUNServerPort
+						))
+					{
+						ClientEndPoint = remoteEndPoint
+					};
 
-				try
-				{
-					serverUdpClient.Send(sendingBytes, sendingBytesLength, remoteEndPoint);
-					Console.WriteLine($"已发送响应到客户端: {client.Id}");
+					var sendingBytes = responseMessage.ToBytes();
+					var sendingBytesLength = sendingBytes.Length;
+
+					try
+					{
+						serverUdpClient.Send(sendingBytes, sendingBytesLength, remoteEndPoint);
+						Console.WriteLine($"已发送响应到客户端: {client.Id}");
+					}
+					catch (SocketException ex)
+					{
+						Console.WriteLine($"发送响应失败: {ex.Message}");
+					}
 				}
-				catch (SocketException ex)
-				{
-					Console.WriteLine($"发送响应失败: {ex.Message}");
-				}
-			}
-			if (!clientDict.TryGetValue(message.ClientId, out var clientInDict)) return;
-			// 更新客户端最后活动时间
-			clientInDict.LastActivity = DateTime.UtcNow;
-			//将他的新的公网端点信息存储到列表里面
-			if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
-			{
-				clientInDict.AdditionalClientEndPoints.Add(remoteEndPoint);
-				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
-			}
-			else
-			{
-				Console.ForegroundColor = ConsoleColor.Yellow;
-				Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
-			}
 
-			#region 统计
-
-			Console.ForegroundColor = ConsoleColor.DarkCyan;
-			// Console.WriteLine($"客户端 {clientInDict.Id} 的额外端口: {string.Join(",", clientInDict.AdditionalClientEndPoints)}");
-			// Console.ResetColor();
-			var ipAndPortsDict = new Dictionary<string, List<int>>();
-			foreach (var ipAndPort in clientInDict.AdditionalClientEndPoints)
-			{
-				if (ipAndPortsDict.TryGetValue(ipAndPort.Address.ToString(), out var value))
+				if (!clientDict.TryGetValue(message.ClientId, out var clientInDict)) return;
+				// 更新客户端最后活动时间
+				clientInDict.LastActivity = DateTime.UtcNow;
+				//将他的新的公网端点信息存储到列表里面
+				if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
 				{
-                    value.Add(ipAndPort.Port);
+					clientInDict.AdditionalClientEndPoints.Add(remoteEndPoint);
+					Console.ForegroundColor = ConsoleColor.Green;
+					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
 				}
 				else
 				{
-					ipAndPortsDict.Add(ipAndPort.Address.ToString(), new List<int> { ipAndPort.Port });
+					Console.ForegroundColor = ConsoleColor.Yellow;
+					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
+					Console.ResetColor();
 				}
-			}
-			//将相同IP的端口进行排序
-			foreach (var ipAndPort in ipAndPortsDict)
-			{
-				ipAndPort.Value.Sort();
-			}
-			foreach (var ipAndPort in ipAndPortsDict)
-			{
-				Console.WriteLine($"客户端 {clientInDict.Id} 的额外端口: {ipAndPort.Key}{Environment.NewLine}:{string.Join(Environment.NewLine, ipAndPort.Value)} {Environment.NewLine} 共计 {ipAndPort.Value.Count} 个");
-			}
 
-			#endregion
+				#region 统计并输出客户端的公网IP和端口,并去重和排序, 英文方法名: CountAndOutputClientIPAndPort
+
+				CountAndOutputClientIPAndPort(clientInDict);
+
+				#endregion
+
+				break;
+			}
+			case MessageType.StunResponse:
+			case MessageType.StunResponseError:
+			case MessageType.TURNBroadcast:
+			case MessageType.TURNRegister:
+			case MessageType.TURNServer2ClientHeartbeat:
+			case MessageType.TURNClient2ServerHeartbeat:
+			case MessageType.P2PHolePunchingRequest:
+			case MessageType.P2PHolePunchingResponse:
+			case MessageType.P2PHeartbeat:
+			default:
+				var errorMessage = $"未实现的消息类型: {message.MessageType}";
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine(errorMessage);
+				Console.ResetColor();
+				break;
 		}
 	}
 	catch (ObjectDisposedException)
@@ -256,6 +265,7 @@ Console.CancelKeyPress += (_, e) =>
 	{
 		additionalServer.Value.Close();
 	}
+
 	Console.WriteLine("服务器已关闭");
 	Environment.Exit(0);
 };
@@ -266,4 +276,52 @@ foreach (var additionalServer in additionalServers)
 {
 	additionalServer.Value.Close();
 }
+
 cleanupTimer.Dispose();
+return;
+
+void CountAndOutputClientIPAndPort(StunClient? stunClient)
+{
+	if (stunClient == null) return;
+	Console.ForegroundColor = ConsoleColor.DarkCyan;
+	var ipAndPortsDict = new Dictionary<string, List<int>>
+	{
+		{
+			stunClient.InitialClientEndPoint.Address.ToString(), 
+			new List<int> { stunClient.InitialClientEndPoint.Port }
+		}
+	};
+	foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
+	{
+		if (ipAndPortsDict.TryGetValue(ipAndPort.Address.ToString(), out var value))
+		{
+			value.Add(ipAndPort.Port);
+		}
+		else
+		{
+			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new List<int> { ipAndPort.Port });
+		}
+	}
+
+	//将相同IP的端口进行去重和排序
+	var keys = ipAndPortsDict.Keys.ToList();
+	foreach (var key in keys)
+	{
+		ipAndPortsDict[key] = ipAndPortsDict[key].Distinct().OrderBy(p => p).ToList();
+	}
+
+	foreach (var ipAndPort in ipAndPortsDict)
+	{
+		var sb = new StringBuilder();
+		sb.AppendLine($"客户端 {stunClient.Id} 的IP地址: {ipAndPort.Key} 绑定端口:");
+		foreach (var port in ipAndPort.Value.GroupBy(p => p / 2 * 2).Select(g => g.Key))
+		{
+			sb.AppendLine(port.ToString());
+		}
+
+		sb.AppendLine($"共计 {ipAndPort.Value.Count} 个");
+		Console.WriteLine(sb.ToString());
+	}
+			
+	Console.ResetColor();
+}
