@@ -4,12 +4,17 @@ namespace STUNServer;
 
 public class StunClient
 {
-	public StunClient(Guid clientId, IPEndPoint initialClientEndPoint)
+	public StunClient(Guid clientId, IPEndPoint serverEndPoint, IPEndPoint initialClientEndPoint)
 	{
 		Id = clientId;
+		ServerEndPoint = serverEndPoint;
 		InitialClientEndPoint = initialClientEndPoint;
 	}
 	public Guid Id { get; private set; }
+	/// <summary>
+	/// 创建这个客户端的服务端终结点
+	/// </summary>
+	public IPEndPoint ServerEndPoint { get; set; }
 	/// <summary>
 	/// 客户端的初始公网IP和端口
 	/// </summary>

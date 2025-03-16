@@ -139,7 +139,8 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			case MessageType.StunRequest:
 			{
-				var client = new StunClient(message.ClientId, remoteEndPoint);
+				var serverEndPoint = serverUdpClient.Client.LocalEndPoint as IPEndPoint ?? new IPEndPoint(IPAddress.Any, settings.STUNServerPort);
+				var client = new StunClient(message.ClientId, serverEndPoint, remoteEndPoint);
 
 				#region 如果客户端信息不存在于字典中则添加
 
@@ -297,22 +298,22 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 {
 	if (stunClient == null) return;
 	Console.ForegroundColor = ConsoleColor.DarkCyan;
-	var ipAndPortsDict = new Dictionary<string, ConcurrentBag<int>>
+	var ipAndPortsDict = new Dictionary<string, ConcurrentBag<(int serverPort, int clientPort)>>
 	{
 		{
 			stunClient.InitialClientEndPoint.Address.ToString(), 
-			new ConcurrentBag<int> { stunClient.InitialClientEndPoint.Port }
+			new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
 		}
 	};
 	foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
 	{
 		if (ipAndPortsDict.TryGetValue(ipAndPort.Address.ToString(), out var value))
 		{
-			value.Add(ipAndPort.Port);
+			value.Add((stunClient.ServerEndPoint.Port, ipAndPort.Port));
 		}
 		else
 		{
-			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new ConcurrentBag<int> { ipAndPort.Port });
+			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, ipAndPort.Port) });
 		}
 	}
 
@@ -320,16 +321,16 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 	var keys = ipAndPortsDict.Keys.ToList();
 	foreach (var key in keys)
 	{
-		ipAndPortsDict[key] = new ConcurrentBag<int>(ipAndPortsDict[key].Distinct().OrderBy(p => p));
+		ipAndPortsDict[key] = new ConcurrentBag<(int serverPort, int clientPort)>(ipAndPortsDict[key].Distinct().OrderBy(p => p.clientPort));
 	}
 
 	foreach (var ipAndPort in ipAndPortsDict)
 	{
 		var sb = new StringBuilder();
 		sb.AppendLine($"客户端 {stunClient.Id} 的IP地址: {ipAndPort.Key} 绑定端口:");
-		foreach (var port in ipAndPort.Value.GroupBy(p => p / 2 * 2).Select(g => g.Key))
+		foreach (var port in ipAndPort.Value)
 		{
-			sb.AppendLine(port.ToString());
+			sb.AppendLine($"{port.clientPort} -> {port.serverPort}");
 		}
 
 		sb.AppendLine($"共计 {ipAndPort.Value.Count} 个");
