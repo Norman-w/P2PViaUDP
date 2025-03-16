@@ -7,12 +7,12 @@ namespace P2PViaUDP.Model;
 /// </summary>
 public partial class StunMessage
 {
-	public StunMessage(MessageType messageType, MessageSource messageSource, Guid clientId, IPEndPoint clientEndPoint, IPEndPoint serverEndPoint)
+	public StunMessage(MessageType messageType, MessageSource messageSource, Guid clientId, IPEndPoint serverEndPoint)
 	{
 		MessageType = messageType;
 		MessageSource = messageSource;
 		ClientId = clientId;
-		ClientEndPoint = clientEndPoint;
+		ClientEndPoint = null;
 		ServerEndPoint = serverEndPoint;
 	}
 	/// <summary>
@@ -28,9 +28,9 @@ public partial class StunMessage
 	/// </summary>
 	public Guid ClientId { get; set; }
 	/// <summary>
-	/// 客户端终结点
+	/// 客户端终结点,客户端发送给服务器请求的时候,客户端自己是不知道的.只有服务器知道之后由服务器设置
 	/// </summary>
-	public IPEndPoint ClientEndPoint { get; set; }
+	public IPEndPoint? ClientEndPoint { get; set; }
 	/// <summary>
 	/// 服务器终结点
 	/// </summary>
@@ -46,8 +46,8 @@ public partial class StunMessage
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageSource));
 		bytesList.AddRange(ClientId.ToByteArray());
-		bytesList.AddRange(ClientEndPoint.Address.GetAddressBytes());
-		bytesList.AddRange(BitConverter.GetBytes(ClientEndPoint.Port));
+		bytesList.AddRange(ClientEndPoint == null? new byte[4] : ClientEndPoint.Address.GetAddressBytes());
+		bytesList.AddRange(ClientEndPoint == null? new byte[4] : BitConverter.GetBytes(ClientEndPoint.Port));
 		bytesList.AddRange(ServerEndPoint.Address.GetAddressBytes());
 		bytesList.AddRange(BitConverter.GetBytes(ServerEndPoint.Port));
 		bytesList.AddRange(BitConverter.GetBytes(SendTime.Ticks));
@@ -63,9 +63,11 @@ public partial class StunMessage
 		var clientEndPoint = new IPEndPoint(new IPAddress(bytes.Skip(24).Take(4).ToArray()), BitConverter.ToInt32(bytes, 28));
 		var serverEndPoint = new IPEndPoint(new IPAddress(bytes.Skip(32).Take(4).ToArray()), BitConverter.ToInt32(bytes, 36));
 		var sendTime = new DateTime(BitConverter.ToInt64(bytes, 40));
-		return new StunMessage(messageType, messageSource, clientId, clientEndPoint, serverEndPoint)
+		var result = new StunMessage(messageType, messageSource, clientId, serverEndPoint)
 		{
-			SendTime = sendTime
+			SendTime = sendTime,
+			ClientEndPoint = clientEndPoint
 		};
+		return result;
 	}
 }

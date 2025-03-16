@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using P2PViaUDP;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.Client;
 using P2PViaUDP.Model.TURN;
@@ -68,6 +70,17 @@ public class P2PClient
     public async Task StartAsync()
     {
         _isRunning = true;
+
+        #region 如果是编译器附加的时候,则设置STUNServerIP为本地IP
+
+        if (Debugger.IsAttached)
+        {
+            Console.WriteLine("调试模式已启用,将STUN服务器IP设置为本地IP");
+            _settings.STUNServerIP = "127.0.0.1";
+            Console.WriteLine($"我的ID: {_clientId}");
+        }
+
+        #endregion
         try
         {
             // STUN 阶段
@@ -109,7 +122,6 @@ public class P2PClient
             MessageType.StunRequest,
             MessageSource.Client,
             _clientId,
-            new IPEndPoint(IPAddress.Any, 0),
             serverEndPoint
         );
 
@@ -124,6 +136,30 @@ public class P2PClient
             _myEndPointFromStunReply = response.ClientEndPoint;
             Console.WriteLine($"STUN 响应: 公网终端点 {_myEndPointFromStunReply}");
         }
+
+        #region 每隔50MS(暂定)向额外STUN端口请求进行连接以供STUN能抓到本机的公网IP和端口变化规律
+
+        //注意IP可能确实是不同的,因为我的ID不变但是出网可能因为双线光纤之类的自动切换
+        foreach (var additionalPort in _settings.STUNServerAdditionalPorts)
+        {
+            var additionalServerEndPoint = new IPEndPoint(
+                IPAddress.Parse(_settings.STUNServerIP),
+                additionalPort
+            );
+
+            var additionalStunRequest = new StunMessage(
+                MessageType.StunRequest,
+                MessageSource.Client,
+                _clientId,
+                additionalServerEndPoint
+            );
+
+            var additionalRequestBytes = additionalStunRequest.ToBytes();
+            await _udpClient.SendAsync(additionalRequestBytes, additionalRequestBytes.Length, additionalServerEndPoint);
+            Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}");
+        }
+
+        #endregion
     }
 
     private async Task RegisterToTurnServerAsync()
