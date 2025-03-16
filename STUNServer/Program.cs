@@ -297,11 +297,11 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 {
 	if (stunClient == null) return;
 	Console.ForegroundColor = ConsoleColor.DarkCyan;
-	var ipAndPortsDict = new Dictionary<string, List<int>>
+	var ipAndPortsDict = new Dictionary<string, ConcurrentBag<int>>
 	{
 		{
 			stunClient.InitialClientEndPoint.Address.ToString(), 
-			new List<int> { stunClient.InitialClientEndPoint.Port }
+			new ConcurrentBag<int> { stunClient.InitialClientEndPoint.Port }
 		}
 	};
 	foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
@@ -312,7 +312,7 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 		}
 		else
 		{
-			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new List<int> { ipAndPort.Port });
+			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new ConcurrentBag<int> { ipAndPort.Port });
 		}
 	}
 
@@ -320,7 +320,7 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 	var keys = ipAndPortsDict.Keys.ToList();
 	foreach (var key in keys)
 	{
-		ipAndPortsDict[key] = ipAndPortsDict[key].Distinct().OrderBy(p => p).ToList();
+		ipAndPortsDict[key] = new ConcurrentBag<int>(ipAndPortsDict[key].Distinct().OrderBy(p => p));
 	}
 
 	foreach (var ipAndPort in ipAndPortsDict)
