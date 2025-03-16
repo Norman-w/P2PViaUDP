@@ -231,7 +231,7 @@ void ReceiveCallback(IAsyncResult ar)
 		// 确保服务器继续监听，除非已经被销毁
 		try
 		{
-			serverUdpClient.BeginReceive(ReceiveCallback, null);
+			serverUdpClient.BeginReceive(ReceiveCallback, serverUdpClient);
 		}
 		catch (ObjectDisposedException)
 		{
