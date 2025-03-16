@@ -153,9 +153,10 @@ void ReceiveCallback(IAsyncResult ar)
 				// 更新客户端最后活动时间
 				clientInDict.LastActivity = DateTime.UtcNow;
 				//将他的新的公网端点信息存储到列表里面
-				if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
+				// if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
+				if (clientInDict.AdditionalClientEndPoints.All(p => p.serverEndPoint.Port != remoteEndPoint.Port))
 				{
-					clientInDict.AdditionalClientEndPoints.Add(remoteEndPoint);
+					clientInDict.AdditionalClientEndPoints.Add((serverEndPoint, remoteEndPoint));
 					Console.ForegroundColor = ConsoleColor.Green;
 					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
 				}
@@ -297,18 +298,19 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 	{
 		{
 			stunClient.InitialClientEndPoint.Address.ToString(), 
-			new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
+			// new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
+			new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.InitialServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
 		}
 	};
 	foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
 	{
-		if (ipAndPortsDict.TryGetValue(ipAndPort.Address.ToString(), out var value))
+		if (ipAndPortsDict.TryGetValue(ipAndPort.clientEndPoint.Address.ToString(), out var value))
 		{
-			value.Add((stunClient.ServerEndPoint.Port, ipAndPort.Port));
+			value.Add((ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port));
 		}
 		else
 		{
-			ipAndPortsDict.Add(ipAndPort.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, ipAndPort.Port) });
+			ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
 		}
 	}
 
