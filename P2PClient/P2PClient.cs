@@ -71,7 +71,7 @@ public class P2PClient
     #region 请求STUN服务器
     private async Task RequestStunServerAsync()
     {
-        // 如果IP设置的不是IP的格式(域名)要解析成IP
+        #region 如果IP设置的不是IP的格式(域名)要解析成IP
         var domain = _settings.STUNServerIP;
         if (!IPAddress.TryParse(domain, out var _))
         {
@@ -82,7 +82,10 @@ public class P2PClient
             IPAddress.Parse(_settings.STUNServerIP),
             _settings.STUNServerPort
         );
+        #endregion
 
+        #region 构建STUN请求消息
+        
         var stunRequest = new StunMessage(
             MessageType.StunRequest,
             MessageSource.Client,
@@ -90,17 +93,31 @@ public class P2PClient
             serverEndPoint
         );
 
+        #endregion
+
+        #region 发送STUN请求消息
+
         var requestBytes = stunRequest.ToBytes();
         await _udpClient.SendAsync(requestBytes, requestBytes.Length, serverEndPoint);
 
+        #endregion
+
+        #region 接收STUN响应消息
+        
         var receiveResult = await _udpClient.ReceiveAsync();
         var response = StunMessage.FromBytes(receiveResult.Buffer);
+
+        #endregion
+
+        #region 处理STUN响应消息(获取到的公网IP和端口)
         
         if (response.MessageType == MessageType.StunResponse)
         {
             _myEndPointFromStunReply = response.ClientEndPoint;
             Console.WriteLine($"STUN 响应: 公网终端点 {_myEndPointFromStunReply}");
         }
+
+        #endregion
 
         #region 每隔50MS(暂定)向额外STUN端口请求进行连接以供STUN能抓到本机的公网IP和端口变化规律
 
