@@ -58,8 +58,11 @@ else
 
 #endregion
 
+//服务端(本程序)端口监听器的字典
+var serverPortListenersDict = new Dictionary<ushort, UdpClient>();
 //创建一个UDP服务器,绑定默认的初始化端口
 var server = new UdpClient(settings.STUNServerPort);
+serverPortListenersDict.Add(settings.STUNServerPort, server);
 //额外的STUN服务器端口
 var additionalServers = new Dictionary<ushort, UdpClient>();
 foreach (var port in settings.STUNServerAdditionalPorts)
@@ -67,6 +70,7 @@ foreach (var port in settings.STUNServerAdditionalPorts)
 	var additionalServer = new UdpClient();
 	additionalServer.Client.Bind(new IPEndPoint(IPAddress.Any, port));
 	additionalServers.Add(port, additionalServer);
+	serverPortListenersDict.Add(port, additionalServer);
 	Console.WriteLine($"额外的STUN服务器端口已启动: {port}");
 }
 
@@ -82,36 +86,24 @@ var cleanupTimer = new Timer(CleanupInactiveClients, null, TimeSpan.FromMinutes(
 
 #region 绑定所有服务器的接收回调
 
-server.BeginReceive(ReceiveCallback, server);
-// foreach (var additionalServer in additionalServers)
-// {
-// 	additionalServer.Value.BeginReceive(ReceiveCallback, additionalServer);
-// }
+server.BeginReceive(ReceiveCallback, (settings.STUNServerPort, server));
 for (var i = 0; i < additionalServers.Count; i++)
 {
-	additionalServers.ElementAt(i).Value.BeginReceive(ReceiveCallback, additionalServers.ElementAt(i).Value);
+	var param = (settings.STUNServerAdditionalPorts[i], additionalServers.ElementAt(i).Value);
+	additionalServers.ElementAt(i).Value.BeginReceive(ReceiveCallback, param);
 }
 
 #endregion
 
 void ReceiveCallback(IAsyncResult ar)
 {
-	UdpClient? serverUdpClient;
-	try
+	if (ar.AsyncState == null)
 	{
-		serverUdpClient = (UdpClient?)ar.AsyncState;
-	}
-	catch
-	{
-		serverUdpClient = null;
-	}
-
-	if (serverUdpClient == null)
-	{
-		// throw new Exception("在ReceiveCallback无法获取服务器实例");
-		Console.WriteLine($"在ReceiveCallback无法获取服务器实例,可能是额外的服务器");
+		Console.WriteLine("在ReceiveCallback中无法获取服务器实例");
 		return;
 	}
+	var param = ((ushort serverPort, UdpClient serverUdpClient))ar.AsyncState;
+	var serverUdpClient = param.serverUdpClient;
 
 	try
 	{
@@ -139,7 +131,7 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			case MessageType.StunRequest:
 			{
-				var serverEndPoint = serverUdpClient.Client.LocalEndPoint as IPEndPoint ?? new IPEndPoint(IPAddress.Any, settings.STUNServerPort);
+				var serverEndPoint = new IPEndPoint(IPAddress.Parse(settings.STUNServerIP), param.serverPort);
 				var client = new StunClient(message.ClientId, serverEndPoint, remoteEndPoint);
 
 				#region 如果客户端信息不存在于字典中则添加
