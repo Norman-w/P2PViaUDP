@@ -102,8 +102,7 @@ void ReceiveCallback(IAsyncResult ar)
 		Console.WriteLine("在ReceiveCallback中无法获取服务器实例");
 		return;
 	}
-	var param = ((ushort serverPort, UdpClient serverUdpClient))ar.AsyncState;
-	var serverUdpClient = param.serverUdpClient;
+	var (serverPort, serverUdpClient) = ((ushort serverPort, UdpClient serverUdpClient))ar.AsyncState;
 
 	try
 	{
@@ -131,7 +130,7 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			case MessageType.StunRequest:
 			{
-				var serverEndPoint = new IPEndPoint(IPAddress.Parse(settings.STUNServerIP), param.serverPort);
+				var serverEndPoint = new IPEndPoint(IPAddress.Parse(settings.STUNServerIP), serverPort);
 				var client = new StunClient(message.ClientId, serverEndPoint, remoteEndPoint);
 
 				#region 如果客户端信息不存在于字典中则添加
@@ -237,7 +236,7 @@ void ReceiveCallback(IAsyncResult ar)
 		// 确保服务器继续监听，除非已经被销毁
 		try
 		{
-			serverUdpClient.BeginReceive(ReceiveCallback, serverUdpClient);
+			serverUdpClient.BeginReceive(ReceiveCallback, (serverPort, serverUdpClient));
 		}
 		catch (ObjectDisposedException)
 		{
