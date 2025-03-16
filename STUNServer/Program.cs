@@ -104,6 +104,9 @@ void ReceiveCallback(IAsyncResult ar)
 		return;
 	}
 	var (serverPort, serverUdpClient) = ((ushort serverPort, UdpClient serverUdpClient))ar.AsyncState;
+	Console.ForegroundColor = ConsoleColor.Magenta;
+	Console.WriteLine($"接收回调已触发,端口: {serverPort}");
+	Console.ResetColor();
 
 	try
 	{
