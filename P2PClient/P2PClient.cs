@@ -80,6 +80,8 @@ public class P2PClient
             Console.WriteLine($"我的ID: {_clientId}");
         }
 
+        Console.WriteLine($"STUN服务器IP: {_settings.STUNServerIP}");
+
         #endregion
         try
         {

@@ -168,7 +168,7 @@ void ReceiveCallback(IAsyncResult ar)
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"处理消息时发生错误: {ex.Message}");
+		Console.WriteLine($"处理消息时发生错误: {ex.Message}, {ex.StackTrace}");
 	}
 	finally
 	{
