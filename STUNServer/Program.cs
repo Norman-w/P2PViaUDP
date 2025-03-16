@@ -173,13 +173,35 @@ void ReceiveCallback(IAsyncResult ar)
 				Console.ForegroundColor = ConsoleColor.Yellow;
 				Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
 			}
+
+			#region 统计
+
 			Console.ForegroundColor = ConsoleColor.DarkCyan;
-			Console.WriteLine($"客户端 {clientInDict.Id} 的额外端口: {string.Join(",", clientInDict.AdditionalClientEndPoints)}");
-			Console.ResetColor();
-		}
-		else
-		{
-			
+			// Console.WriteLine($"客户端 {clientInDict.Id} 的额外端口: {string.Join(",", clientInDict.AdditionalClientEndPoints)}");
+			// Console.ResetColor();
+			var ipAndPortsDict = new Dictionary<string, List<int>>();
+			foreach (var ipAndPort in clientInDict.AdditionalClientEndPoints)
+			{
+				if (ipAndPortsDict.TryGetValue(ipAndPort.Address.ToString(), out var value))
+				{
+                    value.Add(ipAndPort.Port);
+				}
+				else
+				{
+					ipAndPortsDict.Add(ipAndPort.Address.ToString(), new List<int> { ipAndPort.Port });
+				}
+			}
+			//将相同IP的端口进行排序
+			foreach (var ipAndPort in ipAndPortsDict)
+			{
+				ipAndPort.Value.Sort();
+			}
+			foreach (var ipAndPort in ipAndPortsDict)
+			{
+				Console.WriteLine($"客户端 {clientInDict.Id} 的额外端口: {ipAndPort.Key}{Environment.NewLine}:{string.Join(Environment.NewLine, ipAndPort.Value)} {Environment.NewLine} 共计 {ipAndPort.Value.Count} 个");
+			}
+
+			#endregion
 		}
 	}
 	catch (ObjectDisposedException)
