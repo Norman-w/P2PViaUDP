@@ -140,36 +140,18 @@ void ReceiveCallback(IAsyncResult ar)
 			case MessageType.StunRequest:
 			{
 				var client = new StunClient(message.ClientId, remoteEndPoint);
+
+				#region 如果客户端信息不存在于字典中则添加
+
 				// 使用线程安全的字典操作
 				if (clientDict.TryAdd(client.Id, client))
 				{
 					Console.WriteLine($"新客户端已连接: {client.Id} - {remoteEndPoint}");
-
-					var responseMessage = new StunMessage(
-						MessageType.StunResponse,
-						MessageSource.Server,
-						client.Id,
-						new IPEndPoint(
-							IPAddress.Parse(settings.STUNServerIP),
-							settings.STUNServerPort
-						))
-					{
-						ClientEndPoint = remoteEndPoint
-					};
-
-					var sendingBytes = responseMessage.ToBytes();
-					var sendingBytesLength = sendingBytes.Length;
-
-					try
-					{
-						serverUdpClient.Send(sendingBytes, sendingBytesLength, remoteEndPoint);
-						Console.WriteLine($"已发送响应到客户端: {client.Id}");
-					}
-					catch (SocketException ex)
-					{
-						Console.WriteLine($"发送响应失败: {ex.Message}");
-					}
 				}
+
+				#endregion
+
+				#region 如果客户端信息存在于字典中则更新客户端信息
 
 				if (!clientDict.TryGetValue(message.ClientId, out var clientInDict)) return;
 				// 更新客户端最后活动时间
@@ -187,6 +169,37 @@ void ReceiveCallback(IAsyncResult ar)
 					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
 					Console.ResetColor();
 				}
+
+				#endregion
+
+				#region 发送STUN响应
+				
+				var responseMessage = new StunMessage(
+					MessageType.StunResponse,
+					MessageSource.Server,
+					client.Id,
+					new IPEndPoint(
+						IPAddress.Parse(settings.STUNServerIP),
+						settings.STUNServerPort
+					))
+				{
+					ClientEndPoint = remoteEndPoint
+				};
+
+				var sendingBytes = responseMessage.ToBytes();
+				var sendingBytesLength = sendingBytes.Length;
+
+				try
+				{
+					serverUdpClient.Send(sendingBytes, sendingBytesLength, remoteEndPoint);
+					Console.WriteLine($"已发送响应到客户端: {client.Id},通过端口: {remoteEndPoint}");
+				}
+				catch (SocketException ex)
+				{
+					Console.WriteLine($"发送响应失败: {ex.Message}");
+				}
+
+				#endregion
 
 				#region 统计并输出客户端的公网IP和端口,并去重和排序, 英文方法名: CountAndOutputClientIPAndPort
 
