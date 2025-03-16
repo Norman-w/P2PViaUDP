@@ -90,6 +90,7 @@ server.BeginReceive(ReceiveCallback, (settings.STUNServerPort, server));
 for (var i = 0; i < additionalServers.Count; i++)
 {
 	var param = (settings.STUNServerAdditionalPorts[i], additionalServers.ElementAt(i).Value);
+	Console.WriteLine($"额外的STUN服务器端口 {param.Item1} 已绑定,准备接收数据");
 	additionalServers.ElementAt(i).Value.BeginReceive(ReceiveCallback, param);
 }
 
