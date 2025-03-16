@@ -32,6 +32,29 @@ if (Debugger.IsAttached)
 	settings.STUNServerIP = "127.0.0.1";
 }
 #endregion
+
+#region 如果自己的IP地址是域名,则解析为IP地址
+
+if (IPAddress.TryParse(settings.STUNServerIP, out var ip))
+{
+	settings.STUNServerIP = ip.ToString();
+}
+else
+{
+	var ipAddresses = Dns.GetHostAddresses(settings.STUNServerIP);
+	if (ipAddresses.Length > 0)
+	{
+		var realIP = ipAddresses[0];
+		Console.WriteLine($"STUN服务器IP地址已由域名 {settings.STUNServerIP} 解析为 {realIP}");
+		settings.STUNServerIP = realIP.ToString();
+	}
+	else
+	{
+		throw new Exception("无法解析STUN服务器IP地址");
+	}
+}
+
+#endregion
 //创建一个UDP服务器,绑定默认的初始化端口
 var server = new UdpClient(settings.STUNServerPort);
 //额外的STUN服务器端口
@@ -117,8 +140,10 @@ void ReceiveCallback(IAsyncResult ar)
 					new IPEndPoint(
 						IPAddress.Parse(settings.STUNServerIP),
 						settings.STUNServerPort
-					));
-				responseMessage.ClientEndPoint = remoteEndPoint;
+					))
+				{
+					ClientEndPoint = remoteEndPoint
+				};
 
 				var sendingBytes = responseMessage.ToBytes();
 				var sendingBytesLength = sendingBytes.Length;
