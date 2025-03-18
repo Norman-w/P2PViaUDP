@@ -326,18 +326,21 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 			new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.InitialServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
 		}
 	};
-	foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
+	lock (stunClient.AdditionalClientEndPoints)
 	{
-		if (ipAndPortsDict.TryGetValue(ipAndPort.clientEndPoint.Address.ToString(), out var value))
+		foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
 		{
-			value.Add((ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port));
-		}
-		else
-		{
-			ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
+			if (ipAndPortsDict.TryGetValue(ipAndPort.clientEndPoint.Address.ToString(), out var value))
+			{
+				value.Add((ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port));
+			}
+			else
+			{
+				ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
+			}
 		}
 	}
-
+	
 	//将相同IP的端口进行去重和排序
 	var keys = ipAndPortsDict.Keys.ToList();
 	foreach (var key in keys)
