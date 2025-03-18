@@ -65,7 +65,7 @@ var serverPortListenersDict = new Dictionary<ushort, UdpClient>();
 #region 服务端端口监听器集合
 
 //创建一个UDP服务器,绑定默认的初始化端口
-var server = new UdpClient(settings.STUNServerPort);
+var server = new UdpClient(new IPEndPoint(IPAddress.Any, settings.STUNServerPort));
 serverPortListenersDict.Add(settings.STUNServerPort, server);
 
 //额外的STUN服务器端口
