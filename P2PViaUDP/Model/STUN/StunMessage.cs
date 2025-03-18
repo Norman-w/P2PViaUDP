@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 
 namespace P2PViaUDP.Model;
 
@@ -69,5 +70,35 @@ public partial class StunMessage
 			ClientEndPoint = clientEndPoint
 		};
 		return result;
+	}
+}
+
+public partial class StunMessage
+{
+	public override string ToString()
+	{
+		var stringBuilder = new StringBuilder();
+		switch (MessageType)
+		{
+			case MessageType.StunResponse:
+			{
+				stringBuilder.Append("STUN反馈:");
+				stringBuilder.Append($"客户端NAT [{ClientEndPoint?.Port}] --> [{ServerEndPoint.Port}] 服务端NAT");
+			}
+				break;
+			case MessageType.StunRequest:
+			case MessageType.StunResponseError:
+			case MessageType.TURNBroadcast:
+			case MessageType.TURNRegister:
+			case MessageType.TURNServer2ClientHeartbeat:
+			case MessageType.TURNClient2ServerHeartbeat:
+			case MessageType.P2PHolePunchingRequest:
+			case MessageType.P2PHolePunchingResponse:
+			case MessageType.P2PHeartbeat:
+			default:
+				throw new ArgumentOutOfRangeException();
+		}
+
+		return stringBuilder.ToString();
 	}
 }

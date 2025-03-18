@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using P2PViaUDP;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.Client;
@@ -46,7 +47,7 @@ public class P2PClient
 		try
 		{
 			// STUN 阶段
-			await RequestStunServerAsync();
+			await RequestStunServerAsync(false);
 
 			// TURN 阶段
 			await RegisterToTurnServerAsync();
@@ -72,8 +73,28 @@ public class P2PClient
 
 	#region 请求STUN服务器
 
-	private async Task RequestStunServerAsync()
+	/// <summary>
+	/// 是否使用相同的端口想不同的服务器端口请求数据
+	/// 如果为true, 只会使用最初创建的udpClient进行对外不同端口的请求,比如都是从一个随机端口55555 请求到 3478, 3479, 3480 ... 3497
+	/// 如果为false, 则会使用不同的新创建的udp client进行对外不同端口的请求,比如从55555->3478, 54321->3479, 54545->3480 ...
+	///		如果使用同一个UDP客户端udpClient对象请求同一个服务器的不同的端口,在服务器收到的都是来自于客户端公网IP的只有一个端口的连接, 那么很可能就是全锥形的NAT
+	///			但是如果用多个客户端udpClient对象请求同一个服务器的不同的端口的话,仍然还是机会在服务端看到来自多个公网端口的连接, 但通常全锥形的端口号是有序递增且是偶数号的
+	///		否则如果使用同一个UDP客户端udpClient或者是使用不同的udpClient来请求,在服务端都收到随机的端口,且怎样都会出现多个连接的话,那么基本就是对称型的.
+	/// </summary>
+	/// <param name="useSameUdpClientToRequestDiffServerPorts"></param>
+	private async Task RequestStunServerAsync(bool useSameUdpClientToRequestDiffServerPorts)
 	{
+		#region 输出日志
+		Console.ForegroundColor = useSameUdpClientToRequestDiffServerPorts ? 
+			ConsoleColor.DarkGreen: Console.ForegroundColor = ConsoleColor.DarkYellow;
+		var stringBuilder = new StringBuilder("执行STUN请求测试,当前正在使用");
+		stringBuilder.Append(useSameUdpClientToRequestDiffServerPorts ? "同一个出网客户端连接实例" : "多个不同的出网客户端连接实例");
+		stringBuilder.Append("向服务器的不同端口请求实例");
+		stringBuilder.Append(useSameUdpClientToRequestDiffServerPorts ? "": "***但配置中的第一个服务端端口仍然会以初始客户端连接实例进行请求***");
+		Console.WriteLine(stringBuilder.ToString());
+		Console.ResetColor();
+		#endregion
+		
 		#region 如果IP设置的不是IP的格式(域名)要解析成IP
 
 		var domain = _settings.STUNServerIP;
@@ -143,20 +164,21 @@ public class P2PClient
 			);
 
 			var additionalRequestBytes = additionalStunRequest.ToBytes();
-			//使用同一个客户端发送给不同的端口
-			await _udpClient.SendAsync(additionalRequestBytes, additionalRequestBytes.Length, additionalServerEndPoint);
-			//使用不同的新建的客户端发送给不同的端口
-			var additionalUdpClient = new UdpClient();
-			await additionalUdpClient.SendAsync(additionalRequestBytes, additionalRequestBytes.Length,
-				additionalServerEndPoint);
+			var realUsingOutGoingUdpClient = useSameUdpClientToRequestDiffServerPorts
+				? _udpClient //使用同一个客户端发送给不同的端口
+				: new UdpClient();//使用不同的新建的客户端发送给不同的端口
+			
+			await realUsingOutGoingUdpClient.SendAsync(additionalRequestBytes, additionalRequestBytes.Length, additionalServerEndPoint);
+			
 			// 发送后转接收,等待5秒后关闭,使用等待2秒的task和等待接收消息的task,同时执行谁wait完毕了以后就整体退出
 			var delayCloseTask = Task.Delay(2000);
-			var receiveTask = additionalUdpClient.ReceiveAsync();
+			var receiveTask = realUsingOutGoingUdpClient.ReceiveAsync();
 			_ = Task.Run(async () =>
 			{
 				var completedTask = await Task.WhenAny(delayCloseTask, receiveTask);
+				var stunResponse = StunMessage.FromBytes(receiveTask.Result.Buffer);
 				Console.WriteLine(completedTask == receiveTask
-					? $"已收到来自 {additionalServerEndPoint} 的响应"
+					? $"来自{additionalServerEndPoint}的响应:{stunResponse}"
 					: $"请求到等待响应超时: {additionalServerEndPoint}");
 			});
 			Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}");
