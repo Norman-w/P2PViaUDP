@@ -8,6 +8,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P2PClient", "P2PClient\P2PC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P2PViaUDP", "P2PViaUDP\P2PViaUDP.csproj", "{1D309C48-ADB9-4F4C-BA57-A5C08A9526EB}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{3EB25287-028F-4A1F-A553-A48AEB4FA6F4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleUdpServer", "SimpleUdpServer\SimpleUdpServer.csproj", "{59709C43-5594-4433-AD65-B9C71C7FFC17}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +34,12 @@ Global
 		{1D309C48-ADB9-4F4C-BA57-A5C08A9526EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1D309C48-ADB9-4F4C-BA57-A5C08A9526EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1D309C48-ADB9-4F4C-BA57-A5C08A9526EB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{59709C43-5594-4433-AD65-B9C71C7FFC17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{59709C43-5594-4433-AD65-B9C71C7FFC17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{59709C43-5594-4433-AD65-B9C71C7FFC17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{59709C43-5594-4433-AD65-B9C71C7FFC17}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{59709C43-5594-4433-AD65-B9C71C7FFC17} = {3EB25287-028F-4A1F-A553-A48AEB4FA6F4}
 	EndGlobalSection
 EndGlobal
