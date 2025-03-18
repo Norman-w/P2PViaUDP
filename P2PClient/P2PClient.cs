@@ -359,7 +359,8 @@ public class P2PClient
 			try
 			{
 				var receiveResult = await _udpClient.ReceiveAsync();
-				await ProcessReceivedMessageAsync(receiveResult.Buffer);
+				var receiveEndPoint = receiveResult.RemoteEndPoint;
+				await ProcessReceivedMessageAsync(receiveResult.Buffer, receiveEndPoint);
 			}
 			catch (Exception ex)
 			{
@@ -376,9 +377,9 @@ public class P2PClient
 
 	#region 处理接收到的消息总入口
 
-	private async Task ProcessReceivedMessageAsync(byte[] data)
+	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiveEndPoint)
 	{
-		Console.WriteLine($"收到消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
+		Console.WriteLine($"收到来自: {receiveEndPoint} 的消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
 		var messageType = (MessageType)data[0];
 		switch (messageType)
 		{
