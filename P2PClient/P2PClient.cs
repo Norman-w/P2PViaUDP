@@ -193,6 +193,8 @@ public class P2PClient
 			});
 			const int delayMs = 50;
 			Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}, 休息{delayMs}毫秒后将继续");
+			
+			Thread.Sleep(delayMs);
 		}
 
 		#endregion
