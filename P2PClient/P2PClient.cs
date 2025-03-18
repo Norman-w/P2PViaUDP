@@ -5,6 +5,7 @@ using System.Text;
 using P2PViaUDP;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.Client;
+using P2PViaUDP.Model.STUN;
 using P2PViaUDP.Model.TURN;
 
 namespace P2PClient;
@@ -49,6 +50,7 @@ public class P2PClient
 		{
 			// STUN 阶段
 			await RequestStunServerAsync(true);
+			await RequestAnOtherStunServerAsync(true);
 
 			// TURN 阶段
 			await RegisterToTurnServerAsync();
@@ -243,6 +245,40 @@ public class P2PClient
 		}
 
 		#endregion
+	}
+
+	/// <summary>
+	/// 像另外一个STUN服务器发送请求,我们可以利用这个方法来侦测相同一个客户端或新开udp客户端以后的端口变化,便于我们进行真正出网请求的猜测.
+	/// 如果是全锥形网络则这个步骤是不需要的,因为我们可以从任何一个地址来访问客户端对外打出的口子
+	/// </summary>
+	/// <param name="useNewUdpClient"></param>
+	private async Task RequestAnOtherStunServerAsync(bool useNewUdpClient)
+	{
+		//TODO 移除这个测试的代码
+		const string theOtherStunServerIp = "121.22.36.190";
+		const int theOtherStunServerPort = 3478;
+		var realUsingUdpClient = useNewUdpClient ? new UdpClient() : _udpClient;
+		var serverEndPoint = new IPEndPoint(IPAddress.Parse(theOtherStunServerIp), theOtherStunServerPort);
+		var stunMessage = new StunMessage(MessageType.StunRequest, MessageSource.Client, _clientId, serverEndPoint);
+		var bytes = stunMessage.ToBytes();
+		await realUsingUdpClient.SendAsync(bytes, bytes.Length, serverEndPoint);
+		const int waitAnOtherStunServerResponseDelayMs = 2000;
+		var timeoutTask = Task.Delay(waitAnOtherStunServerResponseDelayMs);
+		var waitReceiveResponseTask = realUsingUdpClient.ReceiveAsync();
+		var completedTask = await Task.WhenAny(timeoutTask, waitReceiveResponseTask);
+		if (completedTask == waitReceiveResponseTask)
+		{
+			var stunResponseMessage = StunMessage.FromBytes(waitReceiveResponseTask.Result.Buffer);
+			var natEndPointToThisOtherServer = stunResponseMessage.ClientEndPoint;
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine($"客户端到另外一个STUN服务器{serverEndPoint}的NAT外网信息为:{natEndPointToThisOtherServer}");
+		}
+		else
+		{
+			Console.ForegroundColor = ConsoleColor.Red;
+			Console.WriteLine($"客户端到另外一个STUN服务器{serverEndPoint}的请求失败了,超过{waitAnOtherStunServerResponseDelayMs}ms没有收到服务器结果");
+		}
+		Console.ResetColor();
 	}
 
 	#endregion

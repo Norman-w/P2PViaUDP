@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using P2PViaUDP;
 using P2PViaUDP.Model;
+using P2PViaUDP.Model.STUN;
 using STUNServer;
 
 Console.WriteLine("Hello, World!");

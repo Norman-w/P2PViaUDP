@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 
-namespace P2PViaUDP.Model;
+namespace P2PViaUDP.Model.STUN;
 
 /// <summary>
 /// 一条STUN消息,用于客户端和服务器之间的通信
@@ -39,7 +39,7 @@ public partial class StunMessage
 	/// <summary>
 	/// 发送时间
 	/// </summary>
-	public DateTime SendTime { get; set; } = DateTime.Now;
+	public DateTime SendTime { get; init; } = DateTime.Now;
 	
 	public virtual byte[] ToBytes()
 	{
