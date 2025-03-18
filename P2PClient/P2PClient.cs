@@ -50,7 +50,7 @@ public class P2PClient
 		{
 			// STUN 阶段
 			await RequestStunServerAsync(true);
-			await RequestAnOtherStunServerAsync(true);
+			await RequestAnOtherStunServerAsync(false);
 
 			// TURN 阶段
 			await RegisterToTurnServerAsync();
@@ -203,7 +203,7 @@ public class P2PClient
 
 		#region 等待所有的超时机和所有的接收任务结束,或者是如果总用时超过了5秒的话,结束等待,反馈结果
 
-		const int allTaskShouldBeCompletedWithinMs = 5000;
+		const int allTaskShouldBeCompletedWithinMs = 1000;
 		var timeoutTask = Task.Delay(allTaskShouldBeCompletedWithinMs);
 		var allTasks = Task.WhenAll(allReceivedTasks);
 		var firstCompletedTask = await Task.WhenAny(timeoutTask, allTasks);
@@ -272,6 +272,18 @@ public class P2PClient
 			var natEndPointToThisOtherServer = stunResponseMessage.ClientEndPoint;
 			Console.ForegroundColor = ConsoleColor.Green;
 			Console.WriteLine($"客户端到另外一个STUN服务器{serverEndPoint}的NAT外网信息为:{natEndPointToThisOtherServer}");
+
+			#region 如果发现到另外一台STUN服务器的NAT外网信息和之前的一样,则说明是全锥形网络
+			if (_myEndPointFromStunReply != null && natEndPointToThisOtherServer != null &&
+			    _myEndPointFromStunReply.Address.Equals(natEndPointToThisOtherServer.Address) &&
+			    _myEndPointFromStunReply.Port == natEndPointToThisOtherServer.Port)
+			{
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine("🎉🎉🎉恭喜!到另外一台STUN服务器的NAT外网信息和之前的一样,说明是全锥形网络🎉🎉🎉");
+				Console.WriteLine($"你应该可以通过任何一个公网IP和端口访问到这个客户端地址: {_myEndPointFromStunReply}");
+				Console.ResetColor();
+			}
+			#endregion
 		}
 		else
 		{
