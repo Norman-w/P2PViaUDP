@@ -166,17 +166,20 @@ void ReceiveCallback(IAsyncResult ar)
 				clientInDict.LastActivity = DateTime.UtcNow;
 				//将他的新的公网端点信息存储到列表里面
 				// if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
-				if (clientInDict.AdditionalClientEndPoints.All(p => p.serverEndPoint.Port != remoteEndPoint.Port))
+				lock (clientInDict.AdditionalClientEndPoints)
 				{
-					clientInDict.AdditionalClientEndPoints.Add((serverEndPoint, remoteEndPoint));
-					Console.ForegroundColor = ConsoleColor.Green;
-					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
-				}
-				else
-				{
-					Console.ForegroundColor = ConsoleColor.Yellow;
-					Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
-					Console.ResetColor();
+					if (clientInDict.AdditionalClientEndPoints.All(p => p.serverEndPoint.Port != remoteEndPoint.Port))
+					{
+						clientInDict.AdditionalClientEndPoints.Add((serverEndPoint, remoteEndPoint));
+						Console.ForegroundColor = ConsoleColor.Green;
+						Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
+					}
+					else
+					{
+						Console.ForegroundColor = ConsoleColor.Yellow;
+						Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
+						Console.ResetColor();
+					}
 				}
 
 				#endregion

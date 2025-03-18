@@ -181,7 +181,8 @@ public class P2PClient
 					? $"来自{additionalServerEndPoint}的响应:{stunResponse}"
 					: $"请求到等待响应超时: {additionalServerEndPoint}");
 			});
-			Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}");
+			const int delayMs = 50;
+			Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}, 休息{delayMs}毫秒后将继续");
 		}
 
 		#endregion
