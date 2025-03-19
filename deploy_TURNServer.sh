@@ -27,14 +27,9 @@ check_status() {
     fi
 }
 
-# 检查是否在TURNServer目录
-if [ ! -f "Program.cs" ]; then
-    print_message "${YELLOW}" "未在TURNServer目录中，尝试切换到正确目录..."
-    # 切换到上级目录
-    cd ..
-    if [ ! -d "TURNServer" ]; then
-        handle_error "找不到TURNServer目录，请确保在正确的位置运行此脚本"
-    fi
+# 检查TURNServer目录是否存在
+if [ ! -d "TURNServer" ]; then
+    handle_error "找不到TURNServer目录，请确保在正确的位置运行此脚本"
 fi
 
 # 1. 拉取最新代码
@@ -42,13 +37,8 @@ print_message "${CYAN}" "正在拉取最新代码..."
 git pull
 check_status "git pull 失败"
 
-# 2. 切换到TURNServer目录
-print_message "${CYAN}" "切换到TURNServer目录..."
-cd TURNServer
-check_status "切换目录失败"
-
-# 3. 运行服务
+# 2. 运行服务
 print_message "${GREEN}" "开始运行TURNServer..."
 print_message "${CYAN}" "当前工作目录: $(pwd)"
-dotnet run
+dotnet run --project TURNServer
 check_status "dotnet run 失败"
