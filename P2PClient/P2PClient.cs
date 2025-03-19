@@ -393,6 +393,7 @@ public class P2PClient
 	{
 		Console.WriteLine($"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
 		var messageType = (MessageType)data[0];
+		Console.WriteLine($"消息类型: {messageType}");
 		switch (messageType)
 		{
 			case MessageType.TURNBroadcast:
