@@ -138,7 +138,7 @@ public class TurnServer
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, thisNewClient.EndPointFromTURN);
-				Console.WriteLine($"广播已发送到 {thisNewClient.Guid}");
+				Console.WriteLine($"广播已发送到 {thisNewClient.Guid}, 经由 {thisNewClient.EndPointFromTURN}");
 			}
 			catch (Exception ex)
 			{
