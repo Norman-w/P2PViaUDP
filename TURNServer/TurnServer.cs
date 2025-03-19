@@ -81,153 +81,61 @@ public class TurnServer
 
 	private void BroadcastToGroup(TURNRegisterMessage newClient, List<TURNClient> group)
 	{
-		#region 广播到组内其他客户端
-
+		/*
+		 
+		 
+		 1 2 3 4 5 6 
+		 当前的是6, 循环到1的时候,1是早期加入的客户端,6是最新加入的客户端
+		 向1发送6新加入的消息,向2发送6新加入的消息,向3发送6新加入的消息,向4发送6新加入的消息,向5发送6新加入的消息
+		 向6发送1早期加入的消息,向6发送2早期加入的消息,向6发送3早期加入的消息,向6发送4早期加入的消息,向6发送5早期加入的消息
+		
+		
+		
+*/
 		Console.WriteLine($"向组内其他客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
 		var thisNewClient = group.First(c => c.Guid == newClient.Guid);
-		foreach (var client in group.Where(c => c.Guid != newClient.Guid))
+		var groupOtherClientsWithoutThisNewClient = group.Where(c => c.Guid != newClient.Guid).ToList();
+		foreach (var existInGroupEarlierClient in groupOtherClientsWithoutThisNewClient)
 		{
 			try
 			{
-				var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
-					client,
-					thisNewClient,
-					out var isBothNeedPassiveDoHolePunching, 
-					out var active, 
-					out var passive, 
-					out var errorMessage);
-
-				#region 输出决定后的结果
-				if (!decideResult)
+				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient))
 				{
-					Console.WriteLine($"决定打洞的主动和被动时出错: {errorMessage}");
-					continue;
-				}else if (isBothNeedPassiveDoHolePunching)
-				{
-					Console.WriteLine($"两个都需要主动发起打洞,先后加入的两个客户端类型分别是 {thisNewClient.NATType} 和 {client.NATType}");
-				}
-				else if (active is null || passive is null)
-				{
-					Console.ForegroundColor = ConsoleColor.Red;
-					Console.WriteLine($"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {thisNewClient.NATType} 和 {client.NATType}");
-					Console.ResetColor();
 					continue;
 				}
-				else if (active.Guid == thisNewClient.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.Cyan;
-					Console.WriteLine($"新加入的客户端是主动客户端,类型是 {thisNewClient.NATType}");
-					Console.ResetColor();
-				}
-				else if (passive.Guid == thisNewClient.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.Magenta;
-					Console.WriteLine($"新加入的客户端是被动客户端,类型是 {thisNewClient.NATType}");
-					Console.ResetColor();
-				}
-				else
-				{
-					Console.ForegroundColor = ConsoleColor.Yellow;
-					Console.WriteLine($"主动客户端是 {active.Guid}, 被动客户端是 {passive.Guid}");
-					Console.ResetColor();
-				}
-				#endregion
-				
-				// 如果当前循环中遍历中的客户端不是主动客户端,则不需要广播
-				if (client.Guid != active?.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.DarkGray;
-					Console.WriteLine($"当前循环中遍历中的客户端不是主动客户端,则不需要广播");
-					Console.ResetColor();
-					continue;
-				}
-				
 				var broadcast = new TURNBroadcastMessage
 				{
-					EndPoint = newClient.EndPoint,
-					Guid = newClient.Guid,
+					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
+					EndPoint = existInGroupEarlierClient.EndPointFromTURN,
+					Guid = existInGroupEarlierClient.Guid,
 					GroupGuid = newClient.GroupGuid
 				};
-
 				var data = broadcast.ToBytes();
-				_udpServer.Send(data, data.Length, client.EndPointFromTURN);
-				Console.WriteLine($"广播已发送到 {client.Guid}");
+				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
+				Console.WriteLine($"广播已发送到 {existInGroupEarlierClient.Guid}");
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"广播失败: {ex.Message}");
 			}
 		}
-
-		#endregion
-
-		#region 向这个客户端发送组内其他客户端信息
-
-		Console.WriteLine($"向新客户端 {newClient.Guid} 发送组内其他客户端信息, 共 {group.Count - 1} 个");
-
-		foreach (var client in group.Where(c => c.Guid != newClient.Guid))
+		// 向这个新的客户端发送其他客户端的信息
+		Console.WriteLine($"向新客户端 {thisNewClient.Guid} 发送其他客户端信息, 共 {groupOtherClientsWithoutThisNewClient.Count} 个");
+		foreach (var existInGroupEarlierClient in groupOtherClientsWithoutThisNewClient)
 		{
 			try
 			{
-				var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
-					client,
-					thisNewClient,
-					out var isBothNeedPassiveDoHolePunching,
-					out var active,
-					out var passive,
-					out var errorMessage);
-				
-				#region 输出决定后的结果
-				if (!decideResult)
+				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient))
 				{
-					Console.WriteLine($"决定打洞的主动和被动时出错: {errorMessage}");
-					continue;
-				}else if (isBothNeedPassiveDoHolePunching)
-				{
-					Console.WriteLine($"两个都需要主动发起打洞,先后加入的两个客户端类型分别是 {thisNewClient.NATType} 和 {client.NATType}");
-				}
-				else if (active is null || passive is null)
-				{
-					Console.ForegroundColor = ConsoleColor.Red;
-					Console.WriteLine($"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {thisNewClient.NATType} 和 {client.NATType}");
-					Console.ResetColor();
-					continue;
-				}
-				else if (active.Guid == thisNewClient.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.Cyan;
-					Console.WriteLine($"新加入的客户端是主动客户端,类型是 {thisNewClient.NATType}");
-					Console.ResetColor();
-				}
-				else if (passive.Guid == thisNewClient.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.Magenta;
-					Console.WriteLine($"新加入的客户端是被动客户端,类型是 {thisNewClient.NATType}");
-					Console.ResetColor();
-				}
-				else
-				{
-					Console.ForegroundColor = ConsoleColor.Yellow;
-					Console.WriteLine($"主动客户端是 {active.Guid}, 被动客户端是 {passive.Guid}");
-					Console.ResetColor();
-				}
-				#endregion
-				
-				//因为这个循环是将要打洞的消息广播到新加入的客户端自己的,如果自己是被动的,则不需要收到这个消息
-				if (thisNewClient.Guid == passive?.Guid)
-				{
-					Console.ForegroundColor = ConsoleColor.DarkGray;
-					Console.WriteLine($"因为这个循环是将要打洞的消息广播到新加入的客户端自己的,如果自己是被动的,则不需要收到这个消息");
-					Console.ResetColor();
 					continue;
 				}
 				var broadcast = new TURNBroadcastMessage
 				{
-					EndPoint = client.EndPointFromTURN,
-					Guid = client.Guid,
+					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
+					EndPoint = thisNewClient.EndPointFromTURN,
+					Guid = thisNewClient.Guid,
 					GroupGuid = newClient.GroupGuid
 				};
-
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, thisNewClient.EndPointFromTURN);
 				Console.WriteLine($"广播已发送到 {thisNewClient.Guid}");
@@ -237,8 +145,54 @@ public class TurnServer
 				Console.WriteLine($"广播失败: {ex.Message}");
 			}
 		}
+	}
+	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair)
+	{
+		var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
+			earlierPair,
+			laterPair,
+			out var isBothNeedPassiveDoHolePunching, 
+			out var active, 
+			out var passive, 
+			out var errorMessage);
 
+		#region 输出决定后的结果
+		if (!decideResult)
+		{
+			Console.WriteLine($"决定打洞的主动和被动时出错: {errorMessage}");
+			return false;
+		}else if (isBothNeedPassiveDoHolePunching)
+		{
+			Console.WriteLine($"两个都需要主动发起打洞,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
+		}
+		else if (active is null || passive is null)
+		{
+			Console.ForegroundColor = ConsoleColor.Red;
+			Console.WriteLine($"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
+			Console.ResetColor();
+			return false;
+		}
+		else if (active.Guid == laterPair.Guid)
+		{
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.WriteLine($"新加入的客户端是主动客户端,类型是 {laterPair.NATType}");
+			Console.ResetColor();
+		}
+		else if (passive.Guid == laterPair.Guid)
+		{
+			Console.ForegroundColor = ConsoleColor.Magenta;
+			Console.WriteLine($"新加入的客户端是被动客户端,类型是 {laterPair.NATType}");
+			Console.ResetColor();
+		}
+		else
+		{
+			Console.ForegroundColor = ConsoleColor.Yellow;
+			Console.WriteLine($"主动客户端是 {active.Guid}, 被动客户端是 {passive.Guid}");
+			Console.ResetColor();
+		}
 		#endregion
+
+		return true;
 	}
 
 	/// <summary>
