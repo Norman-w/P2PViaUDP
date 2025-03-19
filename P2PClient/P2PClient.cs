@@ -21,7 +21,14 @@ public class P2PClient
 
 	private readonly UdpClient _udpClient = new();
 	private readonly Settings _settings = new();
-	private IPEndPoint? _myEndPointFromStunReply;
+	/// <summary>
+	/// 从主STUN服务器的主端口响应中获取到的我的公网IP和端口
+	/// </summary>
+	private IPEndPoint? _myEndPointFromMainStunMainPortReply;
+	/// <summary>
+	/// 什么时间确定的我是全锥形的NAT,如果我并不是全锥形的NAT,那么这个值就是null
+	/// </summary>
+	private DateTime? _determinedFullConeTime;
 	private readonly Guid _clientId = Guid.NewGuid();
 	private bool _isRunning;
 
@@ -146,8 +153,8 @@ public class P2PClient
 
 		if (response.MessageType == MessageType.StunResponse)
 		{
-			_myEndPointFromStunReply = response.ClientEndPoint;
-			Console.WriteLine($"STUN 响应: 公网终端点 {_myEndPointFromStunReply}");
+			_myEndPointFromMainStunMainPortReply = response.ClientEndPoint;
+			Console.WriteLine($"STUN 响应: 公网终端点 {_myEndPointFromMainStunMainPortReply}");
 		}
 
 		#endregion
@@ -274,13 +281,13 @@ public class P2PClient
 			Console.WriteLine($"客户端到另外一个STUN服务器{serverEndPoint}的NAT外网信息为:{natEndPointToThisOtherServer}");
 
 			#region 如果发现到另外一台STUN服务器的NAT外网信息和之前的一样,则说明是全锥形网络
-			if (_myEndPointFromStunReply != null && natEndPointToThisOtherServer != null &&
-			    _myEndPointFromStunReply.Address.Equals(natEndPointToThisOtherServer.Address) &&
-			    _myEndPointFromStunReply.Port == natEndPointToThisOtherServer.Port)
+			if (_myEndPointFromMainStunMainPortReply != null && natEndPointToThisOtherServer != null &&
+			    _myEndPointFromMainStunMainPortReply.Address.Equals(natEndPointToThisOtherServer.Address) &&
+			    _myEndPointFromMainStunMainPortReply.Port == natEndPointToThisOtherServer.Port)
 			{
 				Console.ForegroundColor = ConsoleColor.Green;
 				Console.WriteLine("🎉🎉🎉恭喜!到另外一台STUN服务器的NAT外网信息和之前的一样,说明是全锥形网络🎉🎉🎉");
-				Console.WriteLine($"你应该可以通过任何一个公网IP和端口访问到这个客户端地址: {_myEndPointFromStunReply}");
+				Console.WriteLine($"你应该可以通过任何一个公网IP和端口访问到这个客户端地址: {_myEndPointFromMainStunMainPortReply}");
 				Console.ResetColor();
 			}
 			#endregion
@@ -313,14 +320,14 @@ public class P2PClient
 				_settings.TURNServerIP = ip[0].ToString();
 			}
 
-			if (_myEndPointFromStunReply == null)
+			if (_myEndPointFromMainStunMainPortReply == null)
 			{
 				throw new Exception("STUN响应为空");
 			}
 
 			var registerMessage = new TURNRegisterMessage
 			{
-				EndPoint = _myEndPointFromStunReply,
+				EndPoint = _myEndPointFromMainStunMainPortReply,
 				Guid = _clientId,
 				GroupGuid = Guid.Parse("00000000-0000-0000-0000-000000000001")
 			};
@@ -331,7 +338,7 @@ public class P2PClient
 			);
 
 			Console.WriteLine($"正在向TURN服务器注册: {turnServerEndPoint}");
-			Console.WriteLine($"本地终端点: {_myEndPointFromStunReply}");
+			Console.WriteLine($"本地终端点: {_myEndPointFromMainStunMainPortReply}");
 
 			var registerBytes = registerMessage.ToBytes();
 			Console.WriteLine($"发送数据大小: {registerBytes.Length}");
@@ -466,7 +473,7 @@ public class P2PClient
 				peer.EndPoint = holePunchingMessageFromOtherClient.SourceEndPoint;
 			}
 
-			if (_myEndPointFromStunReply == null)
+			if (_myEndPointFromMainStunMainPortReply == null)
 			{
 				throw new Exception("STUN响应为空, 无法处理P2P打洞消息");
 			}
@@ -489,7 +496,7 @@ public class P2PClient
 
 	private async Task ProcessBroadcastMessageAsync(byte[] data)
 	{
-		if (_myEndPointFromStunReply == null)
+		if (_myEndPointFromMainStunMainPortReply == null)
 		{
 			throw new Exception("STUN响应为空, 无法处理广播消息");
 		}
@@ -507,7 +514,7 @@ public class P2PClient
 
 			var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
 			{
-				SourceEndPoint = _myEndPointFromStunReply,
+				SourceEndPoint = _myEndPointFromMainStunMainPortReply,
 				DestinationEndPoint = broadcastMessage.EndPoint, DestinationClientId = broadcastMessage.Guid,
 				SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
 			};
@@ -580,7 +587,7 @@ public class P2PClient
 
 	private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
 	{
-		if (_myEndPointFromStunReply == null)
+		if (_myEndPointFromMainStunMainPortReply == null)
 		{
 			throw new Exception("STUN响应为空, 无法发送P2P打洞消息");
 		}
