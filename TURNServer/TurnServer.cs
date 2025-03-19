@@ -99,7 +99,7 @@ public class TurnServer
 		{
 			try
 			{
-				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient))
+				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient, true))
 				{
 					continue;
 				}
@@ -125,7 +125,7 @@ public class TurnServer
 		{
 			try
 			{
-				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient))
+				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient, false))
 				{
 					continue;
 				}
@@ -146,7 +146,15 @@ public class TurnServer
 			}
 		}
 	}
-	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair)
+	/// <summary>
+	/// 检查是否需要继续发送广播消息让客户端触发打洞.
+	/// 如果是正在发送广播给早期加入的客户端,且主动方应该是后面加入这个,则不用继续发送广播,返回false
+	/// </summary>
+	/// <param name="earlierPair"></param>
+	/// <param name="laterPair"></param>
+	/// <param name="isSendingToEarlierPair"></param>
+	/// <returns></returns>
+	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair, bool isSendingToEarlierPair)
 	{
 		var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 			earlierPair,
@@ -192,7 +200,7 @@ public class TurnServer
 		}
 		#endregion
 
-		return true;
+		return isSendingToEarlierPair ? active?.Guid == laterPair.Guid : active?.Guid == earlierPair.Guid;
 	}
 
 	/// <summary>
