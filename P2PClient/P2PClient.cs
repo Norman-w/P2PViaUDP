@@ -606,7 +606,7 @@ public class P2PClient
 			{
 				var messageBytes = message.ToBytes();
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
-				Console.WriteLine("P2P打洞消息已发送");
+				Console.WriteLine($"P2P打洞消息已发送到: {message.DestinationEndPoint}");
 				return;
 			}
 			catch (Exception ex)
