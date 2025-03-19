@@ -7,6 +7,7 @@ using P2PViaUDP.Model;
 using P2PViaUDP.Model.Client;
 using P2PViaUDP.Model.STUN;
 using P2PViaUDP.Model.TURN;
+using TURNServer;
 
 namespace P2PClient;
 
@@ -29,6 +30,7 @@ public class P2PClient
 	/// 什么时间确定的我是全锥形的NAT,如果我并不是全锥形的NAT,那么这个值就是null
 	/// </summary>
 	private DateTime? _determinedFullConeTime;
+	private NATTypeEnum _myNATType = NATTypeEnum.Unknown;
 	private readonly Guid _clientId = Guid.NewGuid();
 	private bool _isRunning;
 
@@ -285,6 +287,8 @@ public class P2PClient
 			    _myEndPointFromMainStunMainPortReply.Address.Equals(natEndPointToThisOtherServer.Address) &&
 			    _myEndPointFromMainStunMainPortReply.Port == natEndPointToThisOtherServer.Port)
 			{
+				_myNATType = NATTypeEnum.FullCone;
+				_determinedFullConeTime = DateTime.Now;
 				Console.ForegroundColor = ConsoleColor.Green;
 				Console.WriteLine("🎉🎉🎉恭喜!到另外一台STUN服务器的NAT外网信息和之前的一样,说明是全锥形网络🎉🎉🎉");
 				Console.WriteLine($"你应该可以通过任何一个公网IP和端口访问到这个客户端地址: {_myEndPointFromMainStunMainPortReply}");
@@ -329,7 +333,8 @@ public class P2PClient
 			{
 				EndPoint = _myEndPointFromMainStunMainPortReply,
 				Guid = _clientId,
-				GroupGuid = Guid.Parse("00000000-0000-0000-0000-000000000001")
+				GroupGuid = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+				DetectedNATType = _myNATType
 			};
 
 			var turnServerEndPoint = new IPEndPoint(

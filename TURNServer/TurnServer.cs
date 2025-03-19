@@ -65,7 +65,7 @@ public class TurnServer
 				var newClient = new TURNClient
 				{
 					EndPointFromTURN = message.EndPoint,
-					Guid = message.Guid
+					Guid = message.Guid, NATType = message.DetectedNATType ?? NATTypeEnum.Unknown
 				};
 				group.Add(newClient);
 

@@ -1,4 +1,5 @@
 using System.Net;
+using TURNServer;
 
 namespace P2PViaUDP.Model.TURN;
 
@@ -16,7 +17,7 @@ public class TURNRegisterMessage
 		4 + // Address
 		4 + // Port
 		16 + // GroupGuid
-		1; // IsFullConeDetected
+		4; // NATType
 	//= 44
 
 
@@ -35,13 +36,20 @@ public class TURNRegisterMessage
 	/// </summary>
 	public Guid GroupGuid { get; init; }
 	
+	// /// <summary>
+	// /// 是否检测到了这个客户端未Full Cone(全锥)的NAT类型
+	// /// 如果是,则P2P的另外一端可以直接使用这个客户端的公网信息进行P2P连接快速的完成打洞
+	// /// 也不需要这个客户端像另外的客户端开洞(不需要为另外客户端准备一个入口,这已经是入口)
+	// /// 另外一端的客户端只需要和这个客户端发送过一次(打洞)消息,这个客户端知道了以后保存到自己的列表中即可
+	// /// </summary>
+	// public bool IsFullConeDetected { get; init; }
+	
 	/// <summary>
-	/// 是否检测到了这个客户端未Full Cone(全锥)的NAT类型
-	/// 如果是,则P2P的另外一端可以直接使用这个客户端的公网信息进行P2P连接快速的完成打洞
-	/// 也不需要这个客户端像另外的客户端开洞(不需要为另外客户端准备一个入口,这已经是入口)
-	/// 另外一端的客户端只需要和这个客户端发送过一次(打洞)消息,这个客户端知道了以后保存到自己的列表中即可
+	/// 检测到的NAT类型,未检测到则为null
+	/// 通过多台STUN服务器可以确定客户端是否为Full Cone(全锥)类型
+	/// TODO 其他类型的NAT类型检测尚在研究中
 	/// </summary>
-	public bool IsFullConeDetected { get; init; }
+	public NATTypeEnum? DetectedNATType { get; set; }
 
 	public static TURNRegisterMessage FromBytes(byte[] receivedBytes)
 	{
@@ -61,14 +69,14 @@ public class TURNRegisterMessage
 		var port = BitConverter.ToInt32(receivedBytes, 24);
 		var endPoint = new IPEndPoint(address, port);
 		var groupGuid = new Guid(receivedBytes.Skip(28).Take(16).ToArray());
-		var isFullConeDetected = Convert.ToBoolean(receivedBytes[44]);
+		var natType = (NATTypeEnum)BitConverter.ToInt32(receivedBytes, 44);
 
 		return new TURNRegisterMessage
 		{
 			Guid = guid,
 			EndPoint = endPoint,
 			GroupGuid = groupGuid,
-			IsFullConeDetected = isFullConeDetected
+			DetectedNATType = natType
 		};
 	}
 
@@ -80,7 +88,7 @@ public class TURNRegisterMessage
 		bytesList.AddRange(EndPoint.Address.GetAddressBytes());
 		bytesList.AddRange(BitConverter.GetBytes(EndPoint.Port));
 		bytesList.AddRange(GroupGuid.ToByteArray());
-		bytesList.Add(Convert.ToByte(IsFullConeDetected));
+		bytesList.AddRange(BitConverter.GetBytes((int)(DetectedNATType ?? NATTypeEnum.Unknown)));
 		var bytes = bytesList.ToArray();
 		return bytes;
 	}
