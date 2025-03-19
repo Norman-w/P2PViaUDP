@@ -64,7 +64,7 @@ public class TurnServer
 			{
 				var newClient = new TURNClient
 				{
-					EndPointFromTURN = message.EndPoint,
+					EndPointFromTURN = remoteEndPoint,
 					Guid = message.Guid, NATType = message.DetectedNATType ?? NATTypeEnum.Unknown
 				};
 				group.Add(newClient);
@@ -112,7 +112,7 @@ public class TurnServer
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
-				Console.WriteLine($"广播已发送到 {existInGroupEarlierClient.Guid}");
+				Console.WriteLine($"广播已发送到 {existInGroupEarlierClient.Guid} 经由 {existInGroupEarlierClient.EndPointFromTURN}");
 			}
 			catch (Exception ex)
 			{
