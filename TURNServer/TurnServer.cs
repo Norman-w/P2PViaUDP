@@ -146,6 +146,7 @@ public class TurnServer
 			}
 		}
 	}
+
 	/// <summary>
 	/// 检查是否需要继续发送广播消息让客户端触发打洞.
 	/// 如果是正在发送广播给早期加入的客户端,且主动方应该是后面加入这个,则不用继续发送广播,返回false
@@ -154,29 +155,33 @@ public class TurnServer
 	/// <param name="laterPair"></param>
 	/// <param name="isSendingToEarlierPair"></param>
 	/// <returns></returns>
-	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair, bool isSendingToEarlierPair)
+	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair,
+		bool isSendingToEarlierPair)
 	{
 		var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 			earlierPair,
 			laterPair,
-			out var isBothNeedPassiveDoHolePunching, 
-			out var active, 
-			out var passive, 
+			out var isBothNeedPassiveDoHolePunching,
+			out var active,
+			out var passive,
 			out var errorMessage);
 
 		#region 输出决定后的结果
+
 		if (!decideResult)
 		{
 			Console.WriteLine($"决定打洞的主动和被动时出错: {errorMessage}");
 			return false;
-		}else if (isBothNeedPassiveDoHolePunching)
+		}
+		else if (isBothNeedPassiveDoHolePunching)
 		{
 			Console.WriteLine($"两个都需要主动发起打洞,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
 		}
 		else if (active is null || passive is null)
 		{
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine($"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
+			Console.WriteLine(
+				$"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
 			Console.ResetColor();
 			return false;
 		}
@@ -198,9 +203,17 @@ public class TurnServer
 			Console.WriteLine($"主动客户端是 {active.Guid}, 被动客户端是 {passive.Guid}");
 			Console.ResetColor();
 		}
+
 		#endregion
 
-		return isSendingToEarlierPair ? active?.Guid == laterPair.Guid : active?.Guid == earlierPair.Guid;
+		if (isSendingToEarlierPair)
+		{
+			return active!.Guid == earlierPair.Guid;
+		}
+		else
+		{
+			return active!.Guid == laterPair.Guid;
+		}
 	}
 
 	/// <summary>
