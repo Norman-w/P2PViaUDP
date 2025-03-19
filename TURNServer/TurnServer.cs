@@ -107,8 +107,10 @@ public class TurnServer
 				{
 					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					EndPoint = existInGroupEarlierClient.EndPointFromTURN,
-					Guid = existInGroupEarlierClient.Guid,
-					GroupGuid = newClient.GroupGuid
+					Guid = thisNewClient.Guid,
+					GroupGuid = newClient.GroupGuid,
+					IsNeedHolePunchingToThisClient = true,
+					IsFullConeDetected = thisNewClient.NATType == NATTypeEnum.FullCone
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
@@ -133,8 +135,10 @@ public class TurnServer
 				{
 					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					EndPoint = thisNewClient.EndPointFromTURN,
-					Guid = thisNewClient.Guid,
-					GroupGuid = newClient.GroupGuid
+					Guid = existInGroupEarlierClient.Guid,
+					GroupGuid = newClient.GroupGuid,
+					IsNeedHolePunchingToThisClient = true,
+					IsFullConeDetected = existInGroupEarlierClient.NATType == NATTypeEnum.FullCone
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, thisNewClient.EndPointFromTURN);
