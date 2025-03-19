@@ -399,7 +399,7 @@ public class P2PClient
 				await ProcessBroadcastMessageAsync(data);
 				break;
 			case MessageType.P2PHolePunchingRequest:
-				await ProcessP2PHolePunchingMessageAsync(data);
+				await ProcessP2PHolePunchingMessageAsync(data, receiveEndPoint);
 				break;
 			case MessageType.P2PHeartbeat:
 				await ProcessP2PHeartbeatMessageAsync(data);
@@ -456,13 +456,16 @@ public class P2PClient
 
 	#region 处理接收到的P2P打洞消息
 
-	private Task ProcessP2PHolePunchingMessageAsync(byte[] data)
+	private Task ProcessP2PHolePunchingMessageAsync(byte[] data, IPEndPoint realEndPoint)
 	{
 		try
 		{
 			// 从字节数组中解析P2P打洞消息
 			var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingRequestMessage.FromBytes(data);
-			Console.WriteLine($"收到P2P打洞消息，来自: {holePunchingMessageFromOtherClient.SourceEndPoint}");
+			Console.WriteLine(
+				$"收到P2P打洞消息，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {realEndPoint}的客户端");
+			Console.WriteLine($"更新他的实际通讯地址为: {realEndPoint}");
+			holePunchingMessageFromOtherClient.SourceEndPoint = realEndPoint;
 			// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
 			var peerId = holePunchingMessageFromOtherClient.SourceClientId;
 			if (!_peerClients.TryGetValue(peerId, out var peer))
