@@ -510,7 +510,7 @@ public class P2PClient
 		{
 			// 从字节数组中解析广播消息
 			var broadcastMessage = TURNBroadcastMessage.FromBytes(data);
-			Console.WriteLine($"收到广播消息，来自: {broadcastMessage.EndPoint}");
+			Console.WriteLine($"从自己在TURN服务器上暴露的外网端口: {broadcastMessage.ClientSideEndPointToTURN} 收到消息: {broadcastMessage}");
 			if (broadcastMessage.Guid == _clientId)
 			{
 				Console.WriteLine("收到自己的广播消息，忽略");
@@ -520,14 +520,14 @@ public class P2PClient
 			var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
 			{
 				SourceEndPoint = _myEndPointFromMainStunMainPortReply,
-				DestinationEndPoint = broadcastMessage.EndPoint, DestinationClientId = broadcastMessage.Guid,
+				DestinationEndPoint = broadcastMessage.ClientSideEndPointToTURN, DestinationClientId = broadcastMessage.Guid,
 				SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
 			};
 
 			//加入到对方的PeerClient集合
 			if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
 			{
-				_peerClients.Add(broadcastMessage.Guid, new PeerClient(broadcastMessage.EndPoint)
+				_peerClients.Add(broadcastMessage.Guid, new PeerClient(broadcastMessage.ClientSideEndPointToTURN)
 				{
 					Guid = broadcastMessage.Guid
 				});
@@ -535,7 +535,7 @@ public class P2PClient
 			}
 			else
 			{
-				peer.EndPoint = broadcastMessage.EndPoint;
+				peer.EndPoint = broadcastMessage.ClientSideEndPointToTURN;
 			}
 
 			// 处理P2P打洞
@@ -606,7 +606,7 @@ public class P2PClient
 			{
 				var messageBytes = message.ToBytes();
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
-				Console.WriteLine($"P2P打洞消息已发送到: {message.DestinationEndPoint}");
+				Console.WriteLine($"P2P打洞消息已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
 				return;
 			}
 			catch (Exception ex)

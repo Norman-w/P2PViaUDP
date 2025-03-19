@@ -21,10 +21,10 @@ public class TURNBroadcastMessage
 	/// </summary>
 	public Guid Guid { get; init; }
 	/// <summary>
-	/// 客户端的公网信息
+	/// 客户端在TURN服务器中的公网信息
 	/// 当广播提及的客户端是一个全锥形的NAT并且广播说收到广播的人需要打洞,那么就用这个EndPoint来进行打洞
 	/// </summary>
-	public required IPEndPoint EndPoint { get; init; }
+	public required IPEndPoint ClientSideEndPointToTURN { get; init; }
 	/// <summary>
 	/// 要加入的组Guid
 	/// </summary>
@@ -49,8 +49,8 @@ public class TURNBroadcastMessage
 		var bytesList = new List<byte>();
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
 		bytesList.AddRange(Guid.ToByteArray());
-		bytesList.AddRange(EndPoint.Address.GetAddressBytes());
-		bytesList.AddRange(BitConverter.GetBytes(EndPoint.Port));
+		bytesList.AddRange(ClientSideEndPointToTURN.Address.GetAddressBytes());
+		bytesList.AddRange(BitConverter.GetBytes(ClientSideEndPointToTURN.Port));
 		bytesList.AddRange(GroupGuid.ToByteArray());
 		bytesList.Add(IsNeedHolePunchingToThisClient ? (byte)1 : (byte)0);
 		bytesList.Add(IsFullConeDetected ? (byte)1 : (byte)0);
@@ -96,7 +96,7 @@ public class TURNBroadcastMessage
 		return new TURNBroadcastMessage
 		{
 			Guid = guid,
-			EndPoint = endPoint,
+			ClientSideEndPointToTURN = endPoint,
 			GroupGuid = groupGuid,
 			IsNeedHolePunchingToThisClient = isNeedHolePunchingToThisClient,
 			IsFullConeDetected = isFullConeDetected,
