@@ -1,5 +1,14 @@
 # P2P基于UDP的打洞套件
 
+运行测试客户端的sh脚本前请:
+```bash
+chmod +x run-docker.sh
+```
+再
+```bash
+./run-test-p2p-client-in-docker.sh
+```
+
 全锥形网络的拓扑参考:
 ```bash
 d2 --watch udp-nat-p2p.d2
