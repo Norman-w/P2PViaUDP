@@ -9,7 +9,7 @@ NC='\033[0m' # No Color
 
 # 定义镜像名称
 IMAGE_NAME="p2p-client"
-DOCKERFILE_PATH="/P2PClient/Dockerfile"
+DOCKERFILE_PATH="P2PClient/Dockerfile"
 
 # 输出带颜色的信息函数
 print_message() {
