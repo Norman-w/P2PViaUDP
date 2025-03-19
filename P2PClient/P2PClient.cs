@@ -371,8 +371,8 @@ public class P2PClient
 			try
 			{
 				var receiveResult = await _udpClient.ReceiveAsync();
-				var receiveEndPoint = receiveResult.RemoteEndPoint;
-				await ProcessReceivedMessageAsync(receiveResult.Buffer, receiveEndPoint);
+				var receiverRemoteEndPoint = receiveResult.RemoteEndPoint;
+				await ProcessReceivedMessageAsync(receiveResult.Buffer, receiverRemoteEndPoint);
 			}
 			catch (Exception ex)
 			{
@@ -389,9 +389,9 @@ public class P2PClient
 
 	#region 处理接收到的消息总入口
 
-	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiveEndPoint)
+	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
-		Console.WriteLine($"收到来自: {receiveEndPoint} 的消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
+		Console.WriteLine($"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
 		var messageType = (MessageType)data[0];
 		switch (messageType)
 		{
@@ -399,7 +399,7 @@ public class P2PClient
 				await ProcessBroadcastMessageAsync(data);
 				break;
 			case MessageType.P2PHolePunchingRequest:
-				await ProcessP2PHolePunchingMessageAsync(data, receiveEndPoint);
+				await ProcessP2PHolePunchingRequestMessageAsync(data, receiverRemoteEndPoint);
 				break;
 			case MessageType.P2PHeartbeat:
 				await ProcessP2PHeartbeatMessageAsync(data);
@@ -411,6 +411,8 @@ public class P2PClient
 			case MessageType.TURNServer2ClientHeartbeat:
 			case MessageType.TURNClient2ServerHeartbeat:
 			case MessageType.P2PHolePunchingResponse:
+				await ProcessP2PHolePunchingResponseMessageAsync(data);
+				break;
 			default:
 				Console.WriteLine($"未知消息类型: {messageType}");
 				break;
@@ -435,8 +437,16 @@ public class P2PClient
 			// 更新对方的心跳时间
 			if (_peerClients.TryGetValue(heartbeatMessage.SenderId, out var peer))
 			{
-				peer.LastHeartbeatFromHim = DateTime.Now;
-				Console.WriteLine($"已更新对方的心跳时间: {heartbeatMessage.SenderId}");
+				if (peer.LastHeartbeatFromHim == DateTime.MinValue || peer.LastHeartbeatFromHim == null)
+				{
+					peer.LastHeartbeatFromHim = DateTime.Now;
+					Console.WriteLine($"首次收到对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}, 开始给他发送心跳包");
+				}
+				else
+				{
+					peer.LastHeartbeatFromHim = DateTime.Now;
+					Console.WriteLine($"已更新对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}");
+				}
 			}
 			else
 			{
@@ -456,16 +466,16 @@ public class P2PClient
 
 	#region 处理接收到的P2P打洞消息
 
-	private Task ProcessP2PHolePunchingMessageAsync(byte[] data, IPEndPoint realEndPoint)
+	private Task ProcessP2PHolePunchingRequestMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
 		try
 		{
 			// 从字节数组中解析P2P打洞消息
 			var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingRequestMessage.FromBytes(data);
 			Console.WriteLine(
-				$"收到P2P打洞消息，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {realEndPoint}的客户端");
-			Console.WriteLine($"更新他的实际通讯地址为: {realEndPoint}");
-			holePunchingMessageFromOtherClient.SourceEndPoint = realEndPoint;
+				$"收到P2P打洞消息，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {receiverRemoteEndPoint}的客户端");
+			Console.WriteLine($"更新他的实际通讯地址为: {receiverRemoteEndPoint}");
+			holePunchingMessageFromOtherClient.SourceEndPoint = receiverRemoteEndPoint;
 			// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
 			var peerId = holePunchingMessageFromOtherClient.SourceClientId;
 			if (!_peerClients.TryGetValue(peerId, out var peer))
@@ -481,17 +491,65 @@ public class P2PClient
 				peer.EndPoint = holePunchingMessageFromOtherClient.SourceEndPoint;
 			}
 
+			#region 给他发送P2P打洞响应消息
+			
+			var holePunchingResponseMessage = new Client2ClientP2PHolePunchingResponseMessage
+			{
+				ActiveClientEndPoint = receiverRemoteEndPoint,
+				PassiveClientEndPoint = holePunchingMessageFromOtherClient.DestinationEndPoint,
+				ActiveClientId = holePunchingMessageFromOtherClient.SourceClientId,
+				PassiveClientId = holePunchingMessageFromOtherClient.DestinationClientId,
+				//把我的NAT类型告诉他,不告诉他的话,只有TURN服务器知道.
+				PassiveClientNATTye = _myNATType,
+				GroupId = holePunchingMessageFromOtherClient.GroupId,
+				SendTime = DateTime.Now
+			};
+			
+			var responseBytes = holePunchingResponseMessage.ToBytes();
+			_udpClient.SendAsync(responseBytes, responseBytes.Length, receiverRemoteEndPoint);
+			
+
+			#endregion
+
+			#region 因为我已经收到他的打洞消息请求了,所以他就是能发消息给我,我只需要按照他原来的路径给它开一个线程持续发送心跳就行保活就可以了
+
+			Console.WriteLine($"我是打洞的被动方,我已经给他发送了打洞响应消息: {holePunchingResponseMessage},下面开始给他发送心跳包");
+			Thread.Sleep(1000);
+			// 然后我开启一个新的线程去给他发送我的心跳包给他
+			ContinuousSendP2PHeartbeatMessagesAsync(receiverRemoteEndPoint);
+
+			#endregion
+
 			if (_myEndPointFromMainStunMainPortReply == null)
 			{
 				throw new Exception("STUN响应为空, 无法处理P2P打洞消息");
 			}
-
-			// 然后我开启一个新的线程去给她发送我的心跳包给他
-			ContinuousSendP2PHeartbeatMessagesAsync(holePunchingMessageFromOtherClient);
 		}
 		catch (Exception ex)
 		{
 			Console.WriteLine($"处理P2P打洞消息时出错: {ex.Message}");
+			throw;
+		}
+
+		return Task.CompletedTask;
+	}
+	
+	private Task ProcessP2PHolePunchingResponseMessageAsync(byte[] data)
+	{
+		try
+		{
+			// 从字节数组中解析P2P打洞响应消息
+			var holePunchingResponseMessage = Client2ClientP2PHolePunchingResponseMessage.FromBytes(data);
+			// 我是主动方,所以我发出去了打洞消息,才有响应消息
+			Console.WriteLine($"收到P2P打洞响应消息: {holePunchingResponseMessage}, 我实际打洞后跟他通讯的地址是: {holePunchingResponseMessage.ActiveClientEndPoint}, 他实际打洞后跟我通讯的地址是: {holePunchingResponseMessage.PassiveClientEndPoint}");
+
+			Console.WriteLine($"我是主动方,我之前已经发送过打洞请求,这是他给我的回应,所以我们已经打通了,下面开始给他发送心跳包");
+			// 然后我开启一个新的线程去给她发送我的心跳包给他
+			ContinuousSendP2PHeartbeatMessagesAsync(holePunchingResponseMessage.PassiveClientEndPoint);
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"处理P2P打洞响应消息时出错: {ex.Message}");
 			throw;
 		}
 
@@ -561,8 +619,7 @@ public class P2PClient
 
 	#region 持续发送P2P心跳包
 
-	private void ContinuousSendP2PHeartbeatMessagesAsync(
-		Client2ClientP2PHolePunchingRequestMessage holePunchingMessageFromOtherClient)
+	private void ContinuousSendP2PHeartbeatMessagesAsync(IPEndPoint sendHeartbeatMessageTo)
 	{
 		Task.Run(async () =>
 		{
@@ -581,8 +638,8 @@ public class P2PClient
 				//发送
 				var heartbeatBytes = heartbeatMessage.ToBytes();
 				await _udpClient.SendAsync(heartbeatBytes, heartbeatBytes.Length,
-					holePunchingMessageFromOtherClient.SourceEndPoint);
-				Console.WriteLine($"已发送心跳包到: {holePunchingMessageFromOtherClient.SourceEndPoint}, 第{sentTimes}次");
+					sendHeartbeatMessageTo);
+				Console.WriteLine($"已发送心跳包到: {sendHeartbeatMessageTo}, 第{sentTimes}次");
 				//延迟2秒继续发
 				await Task.Delay(2000);
 			}
