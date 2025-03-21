@@ -1,3 +1,14 @@
+/*
+
+
+ 如果还不知道自己的NAT类型,不能去注册到TURN服务器,因为注册到TURN服务器需要知道自己的NAT类型.
+   如果不是全锥形的NAT,访问STUN A服务器的第一个端口,用A服务器的第二个端口回复,如果能回复,但是用别的IP不能回复,就是限制型的
+    如果还是访问STUN A服务器的第一个端口,用A服务器的第二个端口都无法回复,则就是端口限制型的
+	    虽然对称的和端口限制型的都是只能从原端口(发起方请求过的端口)返回,但是对称型的每次创建连接的端口
+
+
+*/
+
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -311,7 +322,6 @@ public class P2PClient
 	#region TURN 流程控制
 
 	#region 注册到TURN服务器
-
 	private async Task RegisterToTurnServerAsync()
 	{
 		try
