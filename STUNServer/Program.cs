@@ -495,7 +495,7 @@ void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult 
 		primaryPortServer.Send(mainPortResponseBytes, mainPortResponseBytes.Length, originalResponse.DetectedClientNATEndPoint);
 		//尝试从次端口给客户端发回去(当前是从服务器)
 		secondaryPortServer.Send(slavePortResponseBytes, slavePortResponseBytes.Length, originalResponse.DetectedClientNATEndPoint);
-		Console.WriteLine($"从属STUN服务器收到了主服务器的透传信息,已将消息透传给客户端{originalResponse.DetectedClientNATEndPoint} 以便客户端确认自己的NAT类型(那种锥形)");
+		Console.WriteLine($"从属STUN服务器收到了主服务器的透传信息,已将消息透传给客户端{originalResponse.DetectedClientNATEndPoint} 以便客户端确认自己的NAT类型(哪种锥形)");
 	}
 	else
 	{
