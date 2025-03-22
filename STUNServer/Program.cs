@@ -47,6 +47,30 @@ Console.WriteLine($"{(isSlaveServer ? "从服务器" : "主服务器")} 的次�
 
 #endregion
 
+//用于主服务器发送给从服务器的透传消息的发送器,只有主服务器会初始化这个实例
+UdpClient? mainStunToSlaveStunMainServerSideSender = null;
+if (!isSlaveServer)
+{
+	mainStunToSlaveStunMainServerSideSender = new UdpClient();
+	Console.ForegroundColor = ConsoleColor.DarkGreen;
+	Console.WriteLine($"主服务器的透传消息发送器已启动,将会经由端口: {settings.SlaveServerReceiveMainServerBytesPort}透传客户端发过来的 哪种锥形检测的消息");
+	Console.ResetColor();
+}
+
+#region 主从STUN服务器的内网连接(只有STUN服务器程序工作在从服务器时才执行的逻辑)
+
+//从服务器端定义的,用于监听主服务器透传消息过来的udp消息接收器.主STUN服务器不会初始化这个实例.
+if (isSlaveServer)
+{
+	var mainStunToSlaveStunSlaveServerSideListener = new UdpClient(new IPEndPoint(IPAddress.Any, settings.SlaveServerReceiveMainServerBytesPort));
+	mainStunToSlaveStunSlaveServerSideListener.BeginReceive(ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback, mainStunToSlaveStunSlaveServerSideListener);
+	Console.ForegroundColor = ConsoleColor.DarkGreen;
+	Console.WriteLine($"从服务器的透传消息接收器已启动,监听端口: {settings.SlaveServerReceiveMainServerBytesPort}");
+	Console.ResetColor();
+}
+
+#endregion
+
 #region 客户端字典
 
 var clientDict = new ConcurrentDictionary<Guid, StunClient>();
@@ -92,6 +116,7 @@ void ReceiveCallback(IAsyncResult ar)
 
 	try
 	{
+		//定义一个空的远程终端点,用于接收的时候确定数据的来源
 		var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
 		Console.WriteLine($"收到数据！来自: {serverUdpClient.Client.LocalEndPoint}");
@@ -289,16 +314,38 @@ void ProcessSTUNRequestMessage(ushort serverPort, StunMessage stunMessage, IPEnd
 }
 
 void ProcessStunNATTypeCheckingRequestMessage(
-	ushort serverPort, 
-	StunNATTypeCheckingRequest message, 
-	IPEndPoint remoteEndPoint, 
+	ushort serverPort,
+	StunNATTypeCheckingRequest message,
+	IPEndPoint remoteEndPoint,
 	UdpClient updPortServer,
 	bool isFromMainStunServer
-	)
+)
 {
-	Console.WriteLine($"{(isFromMainStunServer?"主STUN服务器":"从STUN服务器")} 的端口{serverPort} 收到了来自客户端公网{remoteEndPoint} 的NAT类型检测请求");
+	Console.WriteLine(
+		$"{(isFromMainStunServer ? "主STUN服务器" : "从STUN服务器")} 的端口{serverPort} 收到了来自客户端公网{remoteEndPoint} 的NAT类型检测请求,请求类型: {message.SubCheckingType}");
+	var isIsSymmetricCheckingRequest =
+		message.SubCheckingType == StunNATTypeCheckingRequest.SubCheckingTypeEnum.IsSymmetric;
+	var isWhichKindOfConeCheckingRequest =
+		message.SubCheckingType == StunNATTypeCheckingRequest.SubCheckingTypeEnum.WhichKindOfCone;
+	if (isIsSymmetricCheckingRequest)
+	{
+		ProcessIsSymmetricCheckingRequest(serverPort, message, remoteEndPoint, updPortServer, isFromMainStunServer);
+	}
+
+	if (isWhichKindOfConeCheckingRequest)
+	{
+		if (!isSlaveServer)
+		{
+			MainStunServerProcessWhichKindOfConeCheckingRequest(serverPort, message, remoteEndPoint, updPortServer,
+				isFromMainStunServer);
+		}
+	}
+}
+
+void ProcessIsSymmetricCheckingRequest(ushort serverPort, StunNATTypeCheckingRequest request, IPEndPoint remoteEndPoint, UdpClient udpPortServer, bool isFromMainStunServer)
+{
 	var response = new StunNATTypeCheckingResponse(
-		message.RequestId,
+		request.RequestId,
 		isFromMainStunServer,
 		!isFromMainStunServer,
 		new IPEndPoint(IPAddress.Any, serverPort),
@@ -306,7 +353,7 @@ void ProcessStunNATTypeCheckingRequestMessage(
 		DateTime.UtcNow
 	);
 	//尝试从clientDict取出客户端信息,如果没有,添加一个
-	if (clientDict.TryGetValue(message.ClientId, out var stunClient))
+	if (clientDict.TryGetValue(request.ClientId, out var stunClient))
 	{
 		stunClient.LastActivity = DateTime.UtcNow;
 		stunClient.LastToServerTime = DateTime.UtcNow;
@@ -314,11 +361,139 @@ void ProcessStunNATTypeCheckingRequestMessage(
 	}
 	else
 	{
-		stunClient = new StunClient(message.ClientId, new IPEndPoint(IPAddress.Any, serverPort), remoteEndPoint);
-		clientDict.TryAdd(message.ClientId, stunClient);
+		stunClient = new StunClient(request.ClientId, new IPEndPoint(IPAddress.Any, serverPort), remoteEndPoint);
+		clientDict.TryAdd(request.ClientId, stunClient);
 	}
 	//返回响应给客户端
 	var responseBytes = response.ToBytes();
-	updPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+	udpPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
 	Console.WriteLine($"{(isFromMainStunServer?"主STUN服务器":"从STUN服务器")} 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应");
+}
+void MainStunServerProcessWhichKindOfConeCheckingRequest(
+	ushort serverPort, 
+	StunNATTypeCheckingRequest request, 
+	IPEndPoint remoteEndPoint, 
+	UdpClient udpPortServer, 
+	bool isFromClientToMainStunServer
+	)
+{
+	//如果是主服务器收到的,需要转发给从服务器,然后主服务器的两个端口和从服务器的两个端口都需要往客户端回复,客户端看能收到不,根据从哪里收到了消息检测自己的NAT类型.
+	if (isFromClientToMainStunServer)
+	{
+		if (mainStunToSlaveStunMainServerSideSender == null)
+		{ 
+			Console.WriteLine("主STUN服务器的透传消息发送器未初始化,无法透传消息给从服务器");
+			return;
+		}
+		var responseFromMainStunPrimaryPort = new StunNATTypeCheckingResponse(
+			request.RequestId,
+			true,
+			false,
+			new IPEndPoint(IPAddress.Any, primaryPort),
+			remoteEndPoint,
+			DateTime.UtcNow
+		);
+		var responseBytes = responseFromMainStunPrimaryPort.ToBytes();
+		//主服务器主端口返回
+		primaryPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+		Console.WriteLine($"主STUN服务器 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应");
+		//主服务器从端口返回
+		var responseFromMainStunSecondaryPort = new StunNATTypeCheckingResponse(
+			request.RequestId,
+			true,
+			!false,
+			new IPEndPoint(IPAddress.Any, secondaryPort),
+			remoteEndPoint,
+			DateTime.UtcNow
+		);
+		responseBytes = responseFromMainStunSecondaryPort.ToBytes();
+		secondaryPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+		//转发给从服务器,从服务器收到以后还会在发出去两条消息到客户端
+		//直接创建一个链接就行
+		var mainToSlaveByPassResponse = new StunNATTypeCheckingResponse(
+			request.RequestId,
+			true,
+			false,
+			new IPEndPoint(IPAddress.Any, primaryPort),
+			remoteEndPoint,
+			DateTime.UtcNow
+		);
+		var mainToSlaveByPassResponseBytes = mainToSlaveByPassResponse.ToBytes();
+		mainStunToSlaveStunMainServerSideSender.Send(mainToSlaveByPassResponseBytes, mainToSlaveByPassResponseBytes.Length, new IPEndPoint(IPAddress.Parse(settings.SlaveServerInternalIP), settings.SlaveServerReceiveMainServerBytesPort));
+		Console.WriteLine($"主STUN服务器 的端口{serverPort} 向从STUN服务器的端口{settings.SlaveServerReceiveMainServerBytesPort} 发送了透传消息");
+	}
+	else
+	{
+		var response = new StunNATTypeCheckingResponse(
+			request.RequestId,
+			isFromClientToMainStunServer,
+			!isFromClientToMainStunServer,
+			new IPEndPoint(IPAddress.Any, serverPort),
+			remoteEndPoint,
+			DateTime.UtcNow
+		);
+		var responseBytes = response.ToBytes();
+		udpPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+		Console.WriteLine($"从STUN服务器 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应");
+	}
+}
+//只有从STUN服务器会触发调用这个端口,当主服务器给从服务器发送了具体哪种锥形检测的消息包时,从服务器会接收到这个消息包,然后处理(修改远端信息)后转发给客户端
+void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult ar)
+{
+	if (ar.AsyncState == null)
+	{
+		Console.WriteLine("在ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback中无法获取服务器实例");
+		return;
+	}
+	var udpClient = (UdpClient)ar.AsyncState;
+	var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+	var receivedBytes = udpClient.EndReceive(ar, ref remoteEndPoint);
+	if (remoteEndPoint == null)
+	{
+		throw new Exception($"从从服务器接收主服务器的具体哪种锥形检测的消息包时,检测到所谓的主服务端端点为空,接收的内容是:{receivedBytes}");
+	}
+	#region 进行检查,如果是从其他服务器过来的而不是主服务器的内网地址,则说明可能被攻击
+
+	if (remoteEndPoint.Address.ToString().Equals(settings.MainServerInternalIP) == false)
+	{
+		Console.ForegroundColor = ConsoleColor.Red;
+		Console.WriteLine($"透传端口{settings.SlaveServerReceiveMainServerBytesPort}接收到了来自非主STUN服务器的消息,可能被攻击,来自: {remoteEndPoint}");
+		Console.ResetColor();
+		return;
+	}
+
+	#endregion
+	var messageType = (MessageType)BitConverter.ToInt32(receivedBytes, 0);
+	if (messageType == MessageType.StunNATTypeCheckingResponse)
+	{
+		var originalResponse = StunNATTypeCheckingResponse.FromBytes(receivedBytes);
+		//分别从自己的主端口和从端口返回回去Response(要重新构建response)
+		var mainPortResponse = new StunNATTypeCheckingResponse(
+			originalResponse.RequestId,
+			false,
+			true,
+			new IPEndPoint(IPAddress.Any, settings.MainServerAndSlaveServerPrimaryPort),
+			originalResponse.DetectedClientNATEndPoint,
+			DateTime.UtcNow
+		);
+		var slavePortResponse = new StunNATTypeCheckingResponse(
+			originalResponse.RequestId,
+			false,
+			true,
+			new IPEndPoint(IPAddress.Any, settings.SlaveServerSecondaryPort),
+			originalResponse.DetectedClientNATEndPoint,
+			DateTime.UtcNow
+		);
+		var mainPortResponseBytes = mainPortResponse.ToBytes();
+		var slavePortResponseBytes = slavePortResponse.ToBytes();
+		//尝试从主端口给客户端发回去(当前是从服务器)
+		primaryPortServer.Send(mainPortResponseBytes, mainPortResponseBytes.Length, originalResponse.DetectedClientNATEndPoint);
+		//尝试从次端口给客户端发回去(当前是从服务器)
+		secondaryPortServer.Send(slavePortResponseBytes, slavePortResponseBytes.Length, originalResponse.DetectedClientNATEndPoint);
+		Console.WriteLine($"从属STUN服务器收到了主服务器的透传信息,已将消息透传给客户端{originalResponse.DetectedClientNATEndPoint} 以便客户端确认自己的NAT类型(那种锥形)");
+	}
+	else
+	{
+		Console.WriteLine($"从主服务器那边接受过来的消息不是预期的具体哪种类型的锥形的检测消息 是不是发错了?消息类型{messageType}");
+	}
 }
