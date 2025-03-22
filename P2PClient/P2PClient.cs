@@ -367,6 +367,10 @@ public class P2PClient
 	{
 		if (response.IsFromMainSTUNServer)
 		{
+			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
+			{
+				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
+			}
 			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
 			{
 				_myEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
@@ -374,7 +378,7 @@ public class P2PClient
 		}
 		else if (response.IsFromSlaveSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
 				_myEndPointFromSlaveStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
@@ -394,18 +398,18 @@ public class P2PClient
 	{
 		if (response.IsFromMainSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
 				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
-			else if (response.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort)
+			else if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
 			{
 				_myEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
 		}
 		else if (response.IsFromSlaveSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
 				_myEndPointFromSlaveStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
