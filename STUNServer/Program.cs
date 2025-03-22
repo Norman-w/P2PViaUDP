@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.STUN;
 using STUNServer;
@@ -104,7 +103,6 @@ void ReceiveCallback(IAsyncResult ar)
 				serverPort, 
 				stunNATTypeCheckingRequestMessage, 
 				remoteEndPoint, 
-				clientDict, 
 				serverUdpClient,
 				!isSlaveServer
 				);
@@ -284,7 +282,6 @@ void ProcessStunNATTypeCheckingRequestMessage(
 	ushort serverPort, 
 	StunNATTypeCheckingRequest message, 
 	IPEndPoint remoteEndPoint, 
-	ConcurrentDictionary<Guid, StunClient> clientDict, 
 	UdpClient updPortServer,
 	bool isFromMainStunServer
 	)
