@@ -338,6 +338,8 @@ public class P2PClient
 					if (messageType == MessageType.StunNATTypeCheckingResponse)
 					{
 						var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
+						//输出响应中的客户端外网端点信息:
+						Console.WriteLine($"收到STUN响应: {result.RemoteEndPoint}, 报告的我的外网信息: {response.DetectedClientNATEndPoint}");
 						ProcessWhichKindOfConeStunNATTypeCheckingResponse(response);
 						responses.Add(response);
 
@@ -350,7 +352,9 @@ public class P2PClient
 				}
 				catch (OperationCanceledException)
 				{
+					Console.ForegroundColor = ConsoleColor.Red;
 					Console.WriteLine("接收STUN响应超时");
+					Console.ResetColor();
 					break;
 				}
 			}
@@ -510,14 +514,21 @@ public class P2PClient
 			}
 
 			#endregion
-			#region 如果出网端口是从4个出去的就是NAT
+			
+			#region 如果出网端口是从4个出去的就是对称型NAT
 
 			if (portsToMainServer.Count + portsToSlaveServer.Count == 4)
 			{
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.WriteLine("太遗憾了,你出网到4个不同的端点时,使用了不同的外网地址,你是对称型NAT,打洞成功率会低很多哦.不过不要灰心!");
+				Console.ResetColor();
 				return NATTypeEnum.Symmetric;
 			}
 
 			#endregion
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine("虽然经过第一轮测试,无法确定NAT类型,需要进入下一轮测试,但是恭喜,这样的打洞成功率会高一些哦");
+			Console.ResetColor();
 
 			//需要进入下一轮测试了,让消息从主服务器的主端口出去,然后看回来的路径.
 			return NATTypeEnum.Unknown;
