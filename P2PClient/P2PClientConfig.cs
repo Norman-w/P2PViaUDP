@@ -4,10 +4,11 @@ namespace P2PClient;
 
 public class P2PClientConfig : ConfigBase, IConfig
 {
-	private P2PClientConfig(string stunMainServerIP, string stunSlaveServerIP)
+	private P2PClientConfig(string stunMainServerIP, string stunSlaveServerIP, string turnServerIP)
 	{
 		STUNMainServerIP = stunMainServerIP;
 		STUNSlaveServerIP = stunSlaveServerIP;
+		TURNServerIP = turnServerIP;
 	}
 	/// <summary>
 	/// STUN主服务器IP,开始确认自己的NAT类型时,会向这个服务器的主端口发包
@@ -65,8 +66,14 @@ public class P2PClientConfig : ConfigBase, IConfig
 	/// 当两个打洞的客户端都是对称型NAT时,客户端们通过这个端口进行数据的传输.也就是中继端口.这个端口流量会是整个系统中最大的.
 	/// </summary>
 	public ushort TURNServerDataTransferPortFor2SymmetricNATClients { get; set; }
-	public static P2PClientConfig Default => new("97.64.24.135", "121.22.36.190")
+	public static P2PClientConfig Default => new("97.64.24.135", "121.22.36.190", "97.64.24.135")
 	{
-		STUNMainAndSlaveServerPrimaryPort = 3478
+		STUNMainAndSlaveServerPrimaryPort = 3478,
+		STUNMainServerSecondaryPort = 3479,
+		STUNSlaveServerSecondaryPort = 3480,
+		TURNServerPrimaryPort = 3749,
+		TURNServerAdditionalPortsForNATPortPrediction = 
+			new List<ushort> {3750,3751,3752,3753,3754,3755,3756,3757,3758,3759},//额外10个,一共TURN 默认会有11个端口 
+		TURNServerDataTransferPortFor2SymmetricNATClients = 3888
 	};
 }

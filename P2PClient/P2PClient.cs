@@ -177,7 +177,8 @@ public class P2PClient
 		};
 
 		// 并行执行所有发送任务,只要有一个发送成功就进入到接收状态防止漏掉消息.
-		await Task.WhenAny(sendTasks);
+		await Task.WhenAll(sendTasks);
+		Console.WriteLine("所有的STUN请求消息已发送");
 		#endregion
 
 		var isSymmetricCheckingResult = await ReceiveIsSymmetricCheckingRequestStunResponses(2000);
@@ -327,6 +328,7 @@ public class P2PClient
 
 					if (completedTask != receiveTask)
 					{
+						Console.WriteLine("接收STUN响应超时");
 						break; // 超时退出
 					}
 
@@ -348,6 +350,7 @@ public class P2PClient
 				}
 				catch (OperationCanceledException)
 				{
+					Console.WriteLine("接收STUN响应超时");
 					break;
 				}
 			}

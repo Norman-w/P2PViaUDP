@@ -23,12 +23,15 @@ public class TURNServerConfig : ConfigBase, IConfig
 	/// </summary>
 	public List<ushort> AdditionalPortsForTURNPrediction { get; private set; } = new();
 	
+	public ushort TURNServerDataTransferPortFor2SymmetricNATClients { get; private set; }
+	
 	public static TURNServerConfig Default => new()
 	{
 		MainPort = 3749,//注意是3749不是3479
 		AdditionalPortsForTURNPrediction = new List<ushort>
 		{
 			3750,3751,3752,3753,3754,3755,3756,3757,3758,3759//额外10个,一共TURN 默认会有11个端口
-		}
+		}, 
+		TURNServerDataTransferPortFor2SymmetricNATClients = 3888
 	};
 }
