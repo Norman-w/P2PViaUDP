@@ -426,6 +426,21 @@ public class P2PClient
 		if (responses.Count != 4)
 		{
 			Console.WriteLine($"收到的STUN响应数量不正确,应为4,实际为{responses.Count}");
+			#region 根据收到的ip数量判断,如果是只有一个IP收到了,报告一下是主服务器掉故障了还是从服务器.
+			var isMainServerError = !responses.Any(r => r.IsFromMainSTUNServer);
+			var isSlaveServerError = !responses.Any(r => r.IsFromSlaveSTUNServer);
+			if (isMainServerError)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkRed;
+				Console.WriteLine("应该是主STUN服务器故障了");
+			}
+			if (isSlaveServerError)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkRed;
+				Console.WriteLine("应该是从STUN服务器故障了");
+			}
+			Console.ResetColor();
+			#endregion
 			return NATTypeEnum.Unknown;
 		}
 		else
