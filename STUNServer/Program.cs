@@ -20,6 +20,7 @@ Console.WriteLine("Hello, STUNServer!");
 */
 
 #region 服务端端口监听器
+
 var settings = STUNServerConfig.Default;
 
 var isSlaveServer = settings.IsSlaveServer;
@@ -49,7 +50,7 @@ var cleanupTimer = new Timer(CleanupInactiveClients, null, TimeSpan.FromMinutes(
 
 #endregion
 
-#region 绑定所有服务器断点的接收回调
+#region 绑定所有服务器端点的接收回调
 
 primaryPortServer.BeginReceive(ReceiveCallback, (primaryPort, primaryPortServer));
 secondaryPortServer.BeginReceive(ReceiveCallback, (secondaryPort, secondaryPortServer));
@@ -94,6 +95,21 @@ void ReceiveCallback(IAsyncResult ar)
 		Console.WriteLine(!remoteEndPoint.Address.Equals(IPAddress.Any)
 			? $"收到来自 {remoteEndPoint.Address}:{remoteEndPoint.Port} 的连接"
 			: "收到来自未知地址的连接");
+		
+		var messageType = (MessageType)BitConverter.ToInt32(receivedBytes, 0);
+		if (messageType == MessageType.StunNATTypeCheckingRequest)
+		{
+			var stunNATTypeCheckingRequestMessage = StunNATTypeCheckingRequest.FromBytes(receivedBytes);
+			ProcessStunNATTypeCheckingRequestMessage(
+				serverPort, 
+				stunNATTypeCheckingRequestMessage, 
+				remoteEndPoint, 
+				clientDict, 
+				serverUdpClient,
+				!isSlaveServer
+				);
+			return;
+		}
 
 		var message = StunMessage.FromBytes(receivedBytes);
 		message.ClientEndPoint = remoteEndPoint;
@@ -101,79 +117,7 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			case MessageType.StunRequest:
 			{
-				var serverEndPoint = new IPEndPoint(IPAddress.Any, serverPort);
-				var client = new StunClient(message.ClientId, serverEndPoint, remoteEndPoint);
-
-				#region 如果客户端信息不存在于字典中则添加
-
-				// 使用线程安全的字典操作
-				if (clientDict.TryAdd(client.Id, client))
-				{
-					Console.WriteLine($"新客户端已连接: {client.Id} - {remoteEndPoint}");
-				}
-
-				#endregion
-
-				#region 如果客户端信息存在于字典中则更新客户端信息
-
-				if (!clientDict.TryGetValue(message.ClientId, out var clientInDict)) return;
-				// 更新客户端最后活动时间
-				clientInDict.LastActivity = DateTime.UtcNow;
-				//将他的新的公网端点信息存储到列表里面
-				// if (!clientInDict.AdditionalClientEndPoints.Contains(remoteEndPoint))
-				lock (clientInDict.AdditionalClientEndPoints)
-				{
-					if (clientInDict.AdditionalClientEndPoints.All(p => p.serverEndPoint.Port != remoteEndPoint.Port))
-					{
-						clientInDict.AdditionalClientEndPoints.Add((serverEndPoint, remoteEndPoint));
-						Console.ForegroundColor = ConsoleColor.Green;
-						Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已添加");
-					}
-					else
-					{
-						Console.ForegroundColor = ConsoleColor.Yellow;
-						Console.WriteLine($"客户端 {clientInDict.Id} 的端口 {remoteEndPoint} 已存在");
-						Console.ResetColor();
-					}
-				}
-
-				#endregion
-
-				#region 发送STUN响应
-
-				var responseMessage = new StunMessage(
-					MessageType.StunResponse,
-					MessageSource.Server,
-					client.Id,
-					new IPEndPoint(
-						IPAddress.Any,
-						serverPort
-					))
-				{
-					ClientEndPoint = remoteEndPoint
-				};
-
-				var sendingBytes = responseMessage.ToBytes();
-				var sendingBytesLength = sendingBytes.Length;
-
-				try
-				{
-					serverUdpClient.Send(sendingBytes, sendingBytesLength, remoteEndPoint);
-					Console.WriteLine($"已发送响应到客户端: {client.Id},通过端口: {remoteEndPoint}");
-				}
-				catch (SocketException ex)
-				{
-					Console.WriteLine($"发送响应失败: {ex.Message}");
-				}
-
-				#endregion
-
-				#region 统计并输出客户端的公网IP和端口,并去重和排序, 英文方法名: CountAndOutputClientIPAndPort
-
-				CountAndOutputClientIPAndPort(clientInDict);
-
-				#endregion
-
+				ProcessSTUNRequestMessage(serverPort, message, remoteEndPoint, clientDict, serverUdpClient);
 				break;
 			}
 			case MessageType.StunResponse:
@@ -272,69 +216,102 @@ void CleanupInactiveClients(object? state)
 
 #endregion
 
-#region 统计并输出客户端的公网IP和端口,并去重和排序, 英文方法名: CountAndOutputClientIPAndPort
-
-void CountAndOutputClientIPAndPort(StunClient? stunClient)
+void ProcessSTUNRequestMessage(ushort serverPort, StunMessage stunMessage, IPEndPoint ipEndPoint,
+	ConcurrentDictionary<Guid, StunClient> concurrentDictionary, UdpClient udpClient)
 {
-	if (stunClient == null) return;
-	Console.ForegroundColor = ConsoleColor.DarkCyan;
-	var ipAndPortsDict = new Dictionary<string, ConcurrentBag<(int serverPort, int clientPort)>>
+	var serverEndPoint = new IPEndPoint(IPAddress.Any, serverPort);
+	var stunClient = new StunClient(stunMessage.ClientId, serverEndPoint, ipEndPoint);
+
+	#region 如果客户端信息不存在于字典中则添加
+
+	// 使用线程安全的字典操作
+	if (concurrentDictionary.TryAdd(stunClient.Id, stunClient))
 	{
-		{
-			stunClient.InitialClientEndPoint.Address.ToString(),
-			// new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
-			new ConcurrentBag<(int serverPort, int clientPort)>
-				{ (stunClient.InitialServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
-		}
+		Console.WriteLine($"新客户端已连接: {stunClient.Id} - {ipEndPoint}");
+	}
+
+	#endregion
+
+	#region 如果客户端信息存在于字典中则更新客户端信息
+
+	if (concurrentDictionary.TryGetValue(stunMessage.ClientId, out var clientInDict))
+	{
+		// 更新客户端最后活动时间
+		clientInDict.LastActivity = DateTime.UtcNow;
+	}
+
+	#endregion
+
+	#region 发送STUN响应
+
+	var responseMessage = new StunMessage(
+		MessageType.StunResponse,
+		MessageSource.Server,
+		stunClient.Id,
+		new IPEndPoint(
+			IPAddress.Any,
+			serverPort
+		))
+	{
+		ClientEndPoint = ipEndPoint
 	};
-	lock (stunClient.AdditionalClientEndPoints)
+
+	var sendingBytes = responseMessage.ToBytes();
+	var sendingBytesLength = sendingBytes.Length;
+
+	try
 	{
-		foreach (var ipAndPort in stunClient.AdditionalClientEndPoints)
-		{
-			if (ipAndPortsDict.TryGetValue(ipAndPort.clientEndPoint.Address.ToString(), out var value))
-			{
-				value.Add((ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port));
-			}
-			else
-			{
-				ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(),
-					new ConcurrentBag<(int serverPort, int clientPort)>
-						{ (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
-			}
-		}
+		udpClient.Send(sendingBytes, sendingBytesLength, ipEndPoint);
+		Console.WriteLine($"已发送响应到客户端: {stunClient.Id},通过端口: {ipEndPoint}");
+	}
+	catch (SocketException ex)
+	{
+		Console.WriteLine($"发送响应失败: {ex.Message}");
 	}
 
-	//将相同IP的端口进行去重和排序
-	var keys = ipAndPortsDict.Keys.ToList();
-	foreach (var key in keys)
-	{
-		ipAndPortsDict[key] =
-			new ConcurrentBag<(int serverPort, int clientPort)>(ipAndPortsDict[key].Distinct()
-				.OrderBy(p => p.clientPort));
-	}
+	#endregion
 
-	foreach (var ipAndPort in ipAndPortsDict)
-	{
-		var sb = new StringBuilder();
-		sb.AppendLine($"客户端 {stunClient.Id} 的IP地址: {ipAndPort.Key} 绑定端口:");
-		var clientPorts = ipAndPort.Value
-			.Select(p => p.clientPort) // 选取客户端端口
-			.Distinct() // 去重操作
-			.OrderBy(p => p) // 按顺序排序
-			.ToList(); // 转为列表
-		foreach (var port in ipAndPort.Value)
-		{
-			sb.AppendLine($"{port.clientPort} -> {port.serverPort}");
-		}
+	#region 如果当前是主STUN服务器,还要看客户端发来的STUNRequest的类型是什么然后进行后续的处理
+	
+	/*
+	 如果是需要1发多回(当前设计是1发4回),用于检测是否全锥形,是否IP受限锥,是否端口受限锥,是否对称形
+	 */
 
-		sb.AppendLine($"共计 {clientPorts.Count} 个");
-		Console.WriteLine(sb.ToString());
-		if (clientPorts.Count != 1) continue;
-		Console.ForegroundColor = ConsoleColor.Green;
-		Console.WriteLine("恭喜,看起来客户端是全锥形或者端口受限锥形网络(这两种是我测试过的,使用同一个客户端实例连接到同一个服务器的不同端口时,客户端公网使用相同端口)");
-	}
-
-	Console.ResetColor();
+	#endregion
 }
 
-#endregion
+void ProcessStunNATTypeCheckingRequestMessage(
+	ushort serverPort, 
+	StunNATTypeCheckingRequest message, 
+	IPEndPoint remoteEndPoint, 
+	ConcurrentDictionary<Guid, StunClient> clientDict, 
+	UdpClient updPortServer,
+	bool isFromMainStunServer
+	)
+{
+	Console.WriteLine($"{(isFromMainStunServer?"主STUN服务器":"从STUN服务器")} 的端口{serverPort} 收到了来自客户端公网{remoteEndPoint} 的NAT类型检测请求");
+	var response = new StunNATTypeCheckingResponse(
+		message.RequestId,
+		isFromMainStunServer,
+		!isFromMainStunServer,
+		new IPEndPoint(IPAddress.Any, serverPort),
+		remoteEndPoint,
+		DateTime.UtcNow
+	);
+	//尝试从clientDict取出客户端信息,如果没有,添加一个
+	if (clientDict.TryGetValue(message.ClientId, out var stunClient))
+	{
+		stunClient.LastActivity = DateTime.UtcNow;
+		stunClient.LastToServerTime = DateTime.UtcNow;
+		stunClient.LastToClientTime = DateTime.UtcNow;
+	}
+	else
+	{
+		stunClient = new StunClient(message.ClientId, new IPEndPoint(IPAddress.Any, serverPort), remoteEndPoint);
+		clientDict.TryAdd(message.ClientId, stunClient);
+	}
+	//返回响应给客户端
+	var responseBytes = response.ToBytes();
+	updPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+	Console.WriteLine($"{(isFromMainStunServer?"主STUN服务器":"从STUN服务器")} 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应");
+}

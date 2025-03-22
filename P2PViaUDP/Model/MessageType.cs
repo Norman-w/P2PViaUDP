@@ -6,6 +6,8 @@ public enum MessageType
 	/// STUN请求
 	/// </summary>
 	StunRequest,
+	StunNATTypeCheckingRequest,
+	StunNATTypeCheckingResponse,
 	/// <summary>
 	/// STUN响应
 	/// </summary>
