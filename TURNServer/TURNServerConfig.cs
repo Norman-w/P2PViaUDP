@@ -1,6 +1,6 @@
 using P2PViaUDP;
 
-namespace STUNServer;
+namespace TURNServer;
 
 public class TURNServerConfig : ConfigBase, IConfig
 {
@@ -23,7 +23,7 @@ public class TURNServerConfig : ConfigBase, IConfig
 	/// </summary>
 	public List<ushort> AdditionalPortsForTURNPrediction { get; private set; } = new();
 	
-	public static IConfig Default => new TURNServerConfig()
+	public static TURNServerConfig Default => new()
 	{
 		MainPort = 3749,//注意是3749不是3479
 		AdditionalPortsForTURNPrediction = new List<ushort>

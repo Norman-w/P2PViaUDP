@@ -32,7 +32,7 @@ public class P2PClient
 	private Dictionary<Guid, PeerClient> _peerClients = new();
 
 	private readonly UdpClient _udpClient = new();
-	private readonly Settings _settings = new();
+	private readonly P2PClientConfig _settings = P2PClientConfig.Default;
 	/// <summary>
 	/// 从主STUN服务器的主端口响应中获取到的我的公网IP和端口
 	/// </summary>
@@ -62,7 +62,7 @@ public class P2PClient
 		//     Console.WriteLine($"我的ID: {_clientId}");
 		// }
 
-		Console.WriteLine($"STUN服务器IP: {_settings.STUNServerIP}");
+		Console.WriteLine($"STUN服务器IP: {_settings.STUNMainServerIP}");
 
 		#endregion
 
@@ -123,16 +123,16 @@ public class P2PClient
 
 		#region 如果IP设置的不是IP的格式(域名)要解析成IP
 
-		var domain = _settings.STUNServerIP;
+		var domain = _settings.STUNMainServerIP;
 		if (!IPAddress.TryParse(domain, out var _))
 		{
 			var ip = await Dns.GetHostAddressesAsync(domain);
-			_settings.STUNServerIP = ip[0].ToString();
+			_settings.STUNMainServerIP = ip[0].ToString();
 		}
 
 		var serverEndPoint = new IPEndPoint(
-			IPAddress.Parse(_settings.STUNServerIP),
-			_settings.STUNServerPort
+			IPAddress.Parse(_settings.STUNMainServerIP),
+			_settings.STUNMainServerSecondaryPort
 		);
 
 		#endregion
@@ -168,100 +168,6 @@ public class P2PClient
 		{
 			_myEndPointFromMainStunMainPortReply = response.ClientEndPoint;
 			Console.WriteLine($"STUN 响应: 公网终端点 {_myEndPointFromMainStunMainPortReply}");
-		}
-
-		#endregion
-
-		#region 每隔50MS(暂定)向额外STUN端口请求进行连接以供STUN能抓到本机的公网IP和端口变化规律
-
-		var allReceivedTasks = new List<Task>();
-		var allStunResponseMessages = new ConcurrentBag<StunMessage>();
-
-		//注意IP可能确实是不同的,因为我的ID不变但是出网可能因为双线光纤之类的自动切换
-		foreach (var additionalPort in _settings.STUNServerAdditionalPorts)
-		{
-			var additionalServerEndPoint = new IPEndPoint(
-				IPAddress.Parse(_settings.STUNServerIP),
-				additionalPort
-			);
-
-			var additionalStunRequest = new StunMessage(
-				MessageType.StunRequest,
-				MessageSource.Client,
-				_clientId,
-				additionalServerEndPoint
-			);
-
-			var additionalRequestBytes = additionalStunRequest.ToBytes();
-			var realUsingOutGoingUdpClient = useSameUdpClientToRequestDiffServerPorts
-				? _udpClient //使用同一个客户端发送给不同的端口
-				: new UdpClient(); //使用不同的新建的客户端发送给不同的端口
-
-			await realUsingOutGoingUdpClient.SendAsync(additionalRequestBytes, additionalRequestBytes.Length,
-				additionalServerEndPoint);
-
-			// 发送后转接收,等待5秒后关闭,使用等待2秒的task和等待接收消息的task,同时执行谁wait完毕了以后就整体退出
-			var delayCloseTask = Task.Delay(2000);
-			var receiveTask = realUsingOutGoingUdpClient.ReceiveAsync();
-			allReceivedTasks.Add(receiveTask);
-			_ = Task.Run(async () =>
-			{
-				var completedTask = await Task.WhenAny(delayCloseTask, receiveTask);
-				var stunResponse = StunMessage.FromBytes(receiveTask.Result.Buffer);
-				allStunResponseMessages.Add(stunResponse);
-				Console.WriteLine(completedTask == receiveTask
-					? $"来自{additionalServerEndPoint}的响应:{stunResponse}"
-					: $"请求到等待响应超时: {additionalServerEndPoint}");
-			});
-			const int delayMs = 50;
-			Console.WriteLine($"已发送额外STUN请求到: {additionalServerEndPoint}, 休息{delayMs}毫秒后将继续");
-			
-			Thread.Sleep(delayMs);
-		}
-
-		#endregion
-
-		#region 等待所有的超时机和所有的接收任务结束,或者是如果总用时超过了5秒的话,结束等待,反馈结果
-
-		const int allTaskShouldBeCompletedWithinMs = 1000;
-		var timeoutTask = Task.Delay(allTaskShouldBeCompletedWithinMs);
-		var allTasks = Task.WhenAll(allReceivedTasks);
-		var firstCompletedTask = await Task.WhenAny(timeoutTask, allTasks);
-
-		if (firstCompletedTask == timeoutTask)
-		{
-			Console.WriteLine($"等待时间到,已等待{allTaskShouldBeCompletedWithinMs}MS,并非所有任务完成,这通常应该是个bug");
-		}
-		else
-		{
-			var ports = new List<int>();
-			foreach (var message in allStunResponseMessages)
-			{
-				if (message.ClientEndPoint == null)
-					continue;
-				if (ports.Contains(message.ClientEndPoint.Port))
-				{
-					continue;
-				}
-				ports.Add(message.ClientEndPoint.Port);
-			}
-
-			//输出反馈结果
-			if (ports.Count == 1)
-			{
-				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine("恭喜,你访问多个STUN服务器只使用了一个端口,这意味着你并[不是对称型NAT]");
-			}
-			else
-			{
-				Console.ForegroundColor = ConsoleColor.DarkYellow;
-				Console.WriteLine(
-					$"祝你好运!你出网访问的时候,你的外网给你分配的NAT端口有{ports.Count}个" +
-					$"看起来不是Full Cone(全锥形)并不很好打洞" +
-					$"分别是:{string.Join(", ", ports)}");
-			}
-
-			Console.ResetColor();
 		}
 
 		#endregion
@@ -349,7 +255,7 @@ public class P2PClient
 
 			var turnServerEndPoint = new IPEndPoint(
 				IPAddress.Parse(_settings.TURNServerIP),
-				_settings.TURNServerPort
+				_settings.TURNServerPrimaryPort
 			);
 
 			Console.WriteLine($"正在向TURN服务器注册: {turnServerEndPoint}");

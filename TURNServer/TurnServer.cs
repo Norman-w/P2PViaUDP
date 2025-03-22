@@ -3,8 +3,6 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using P2PViaUDP;
-using P2PViaUDP.Model;
 using P2PViaUDP.Model.TURN;
 
 namespace TURNServer;
@@ -13,14 +11,15 @@ public class TurnServer
 {
 	private readonly UdpClient _udpServer;
 	private readonly ConcurrentDictionary<Guid, List<TURNClient>> _groupDict;
-	private readonly Settings _settings;
+	private readonly TURNServerConfig _settings;
+	private bool _isRunning;
 
-	public TurnServer(Settings settings)
+	public TurnServer(TURNServerConfig settings)
 	{
 		_settings = settings;
 		_groupDict = new ConcurrentDictionary<Guid, List<TURNClient>>();
 		// 只指定端口，监听所有IP
-		_udpServer = new UdpClient(settings.TURNServerPort);
+		_udpServer = new UdpClient(settings.MainPort);
 
 		// 添加测试组
 		_groupDict.TryAdd(Guid.Parse("00000000-0000-0000-0000-000000000001"),
@@ -29,9 +28,16 @@ public class TurnServer
 
 	public async Task StartAsync()
 	{
-		Console.WriteLine($"TURN服务器启动在端口: {_settings.TURNServerPort}");
+		if (_isRunning)
+		{
+			Console.WriteLine("TURN服务器已经在运行中");
+			return;
+		}
 
-		while (true)
+		_isRunning = true;
+		Console.WriteLine($"TURN服务器启动在端口: {_settings.MainPort}");
+
+		while (_isRunning)
 		{
 			try
 			{
@@ -43,6 +49,7 @@ public class TurnServer
 				Console.WriteLine($"TURN服务器错误: {ex.Message}");
 			}
 		}
+		_isRunning = false;
 	}
 
 	private void ProcessMessage(byte[] data, IPEndPoint remoteEndPoint)

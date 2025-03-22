@@ -18,7 +18,7 @@ public class STUNServerConfig : ConfigBase, IConfig
 	/// <summary>
 	/// 主服务器的主要端口, 默认3478
 	/// </summary>
-	public ushort MainServerPrimaryPort { get; private set; }
+	public ushort MainServerAndSlaveServerPrimaryPort { get; private set; }
 
 	/// <summary>
 	/// 主服务器的次要端口, 默认3479
@@ -51,10 +51,10 @@ public class STUNServerConfig : ConfigBase, IConfig
 	/// </summary>
 	public ushort SlaveServerReceiveMainServerBytesPort { get; private set; }
 
-	public static IConfig Default => new STUNServerConfig("192.168.6.200", "192.168.1.252")
+	public static STUNServerConfig Default => new("192.168.6.200", "192.168.1.252")
 	{
 		IsSlaveServer = false,
-		MainServerPrimaryPort = 3478,
+		MainServerAndSlaveServerPrimaryPort = 3478,
 		MainServerSecondaryPort = 3479,
 		SlaveServerPrimaryPort = 3478,
 		SlaveServerSecondaryPort = 3480,

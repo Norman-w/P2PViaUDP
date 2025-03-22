@@ -1,17 +1,12 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.Collections.Concurrent;
-using System.Diagnostics;
+﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using P2PViaUDP;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.STUN;
 using STUNServer;
 
-Console.WriteLine("Hello, World!");
-
+Console.WriteLine("Hello, STUNServer!");
 
 /*
 
@@ -23,91 +18,46 @@ Console.WriteLine("Hello, World!");
 
 
 */
-var settings = new Settings();
 
+#region 服务端端口监听器
+var settings = STUNServerConfig.Default;
 
-#region 如果是编译器附加,则设置STUNServerIP为本地IP
-
-if (Debugger.IsAttached)
-{
-	Console.WriteLine("调试模式已启用,将STUN服务器IP设置为本地IP");
-	settings.STUNServerIP = "127.0.0.1";
-}
-
-#endregion
-
-#region 如果自己的IP地址是域名,则解析为IP地址
-
-if (IPAddress.TryParse(settings.STUNServerIP, out var ip))
-{
-	settings.STUNServerIP = ip.ToString();
-}
-else
-{
-	var ipAddresses = Dns.GetHostAddresses(settings.STUNServerIP);
-	if (ipAddresses.Length > 0)
-	{
-		var realIP = ipAddresses[0];
-		Console.WriteLine($"STUN服务器IP地址已由域名 {settings.STUNServerIP} 解析为 {realIP}");
-		settings.STUNServerIP = realIP.ToString();
-	}
-	else
-	{
-		throw new Exception("无法解析STUN服务器IP地址");
-	}
-}
-
-#endregion
-
-//服务端(本程序)端口监听器的字典
-var serverPortListenersDict = new Dictionary<ushort, UdpClient>();
-
-#region 服务端端口监听器集合
+var isSlaveServer = settings.IsSlaveServer;
+var primaryPort = settings.MainServerAndSlaveServerPrimaryPort;
+var secondaryPort = isSlaveServer ? settings.SlaveServerSecondaryPort : settings.MainServerSecondaryPort;
 
 //创建一个UDP服务器,绑定默认的初始化端口
-var server = new UdpClient(new IPEndPoint(IPAddress.Any, settings.STUNServerPort));
-serverPortListenersDict.Add(settings.STUNServerPort, server);
+var primaryPortServer = new UdpClient(new IPEndPoint(IPAddress.Any, primaryPort));
+Console.WriteLine($"{(isSlaveServer ? "从服务器" : "主服务器")} 的主要端口服务已启动,监听端口: {primaryPort}");
 
 //额外的STUN服务器端口
-var additionalServers = new Dictionary<ushort, UdpClient>();
-foreach (var port in settings.STUNServerAdditionalPorts)
-{
-	var additionalServer = new UdpClient();
-	additionalServer.Client.Bind(new IPEndPoint(IPAddress.Any, port));
-	additionalServers.Add(port, additionalServer);
-	serverPortListenersDict.Add(port, additionalServer);
-	Console.WriteLine($"额外的STUN服务器端口已启动: {port}");
-}
+var secondaryPortServer = new UdpClient(new IPEndPoint(IPAddress.Any, secondaryPort));
+
+Console.WriteLine($"{(isSlaveServer ? "从服务器" : "主服务器")} 的次要端口服务已启动,监听端口: {secondaryPort}");
 
 #endregion
 
 #region 客户端字典
-var clientDict = new ConcurrentDictionary<Guid, StunClient>();
-#endregion
 
-#region 添加服务器启动确认信息
-// 添加服务器启动确认信息
-Console.WriteLine(
-	$"UDP服务器已启动，正在监听端口: {settings.STUNServerPort} 额外端口: {string.Join(",", settings.STUNServerAdditionalPorts)}");
+var clientDict = new ConcurrentDictionary<Guid, StunClient>();
+
 #endregion
 
 #region 添加定期清理超时客户端的定时器
+
 var cleanupTimer = new Timer(CleanupInactiveClients, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+
 #endregion
 
 #region 绑定所有服务器断点的接收回调
 
-server.BeginReceive(ReceiveCallback, (settings.STUNServerPort, server));
-for (var i = 0; i < additionalServers.Count; i++)
-{
-	var param = (settings.STUNServerAdditionalPorts[i], additionalServers.ElementAt(i).Value);
-	Console.WriteLine($"额外的STUN服务器端口 {param.Item1} 已绑定,准备接收数据");
-	additionalServers.ElementAt(i).Value.BeginReceive(ReceiveCallback, param);
-}
+primaryPortServer.BeginReceive(ReceiveCallback, (primaryPort, primaryPortServer));
+secondaryPortServer.BeginReceive(ReceiveCallback, (secondaryPort, secondaryPortServer));
 
 #endregion
 
 #region 接收回调方法
+
 void ReceiveCallback(IAsyncResult ar)
 {
 	#region 参数验证和提取,提取服务器实例
@@ -117,14 +67,17 @@ void ReceiveCallback(IAsyncResult ar)
 		Console.WriteLine("在ReceiveCallback中无法获取服务器实例");
 		return;
 	}
+
 	var (serverPort, serverUdpClient) = ((ushort serverPort, UdpClient serverUdpClient))ar.AsyncState;
 
 	#endregion
 
 	#region 接收回调已触发日志输出
+
 	Console.ForegroundColor = ConsoleColor.Magenta;
 	Console.WriteLine($"接收回调已触发,端口: {serverPort}");
 	Console.ResetColor();
+
 	#endregion
 
 	try
@@ -137,6 +90,7 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			throw new Exception("远程终端点为空");
 		}
+
 		Console.WriteLine(!remoteEndPoint.Address.Equals(IPAddress.Any)
 			? $"收到来自 {remoteEndPoint.Address}:{remoteEndPoint.Port} 的连接"
 			: "收到来自未知地址的连接");
@@ -147,7 +101,7 @@ void ReceiveCallback(IAsyncResult ar)
 		{
 			case MessageType.StunRequest:
 			{
-				var serverEndPoint = new IPEndPoint(IPAddress.Parse(settings.STUNServerIP), serverPort);
+				var serverEndPoint = new IPEndPoint(IPAddress.Any, serverPort);
 				var client = new StunClient(message.ClientId, serverEndPoint, remoteEndPoint);
 
 				#region 如果客户端信息不存在于字典中则添加
@@ -186,13 +140,13 @@ void ReceiveCallback(IAsyncResult ar)
 				#endregion
 
 				#region 发送STUN响应
-				
+
 				var responseMessage = new StunMessage(
 					MessageType.StunResponse,
 					MessageSource.Server,
 					client.Id,
 					new IPEndPoint(
-						IPAddress.Parse(settings.STUNServerIP),
+						IPAddress.Any,
 						serverPort
 					))
 				{
@@ -239,7 +193,9 @@ void ReceiveCallback(IAsyncResult ar)
 				break;
 		}
 	}
+
 	#region 错误处理
+
 	catch (ObjectDisposedException)
 	{
 		// 服务器已关闭，不需要继续处理
@@ -253,6 +209,7 @@ void ReceiveCallback(IAsyncResult ar)
 	{
 		Console.WriteLine($"处理消息时发生错误: {ex.Message}, {ex.StackTrace}");
 	}
+
 	#endregion
 
 	#region 确保服务器继续监听，除非已经被销毁
@@ -272,36 +229,33 @@ void ReceiveCallback(IAsyncResult ar)
 
 	#endregion
 }
+
 #endregion
 
 #region 优雅关闭服务器
+
 Console.CancelKeyPress += (_, e) =>
 {
 	e.Cancel = true; // 防止程序立即退出
 	Console.WriteLine("正在关闭服务器...");
-	// cleanupTimer.Dispose();
-	server.Close();
-	foreach (var additionalServer in additionalServers)
-	{
-		additionalServer.Value.Close();
-	}
+	primaryPortServer.Close();
+	secondaryPortServer.Close();
 
 	Console.WriteLine("服务器已关闭");
 	Environment.Exit(0);
 };
 
 Console.ReadLine();
-server.Close();
-foreach (var additionalServer in additionalServers)
-{
-	additionalServer.Value.Close();
-}
+primaryPortServer.Close();
+secondaryPortServer.Close();
 
 cleanupTimer.Dispose();
 return;
+
 #endregion
 
 #region 定时清理超时客户端的方法
+
 void CleanupInactiveClients(object? state)
 {
 	var timeoutThreshold = DateTime.UtcNow.AddMinutes(-10); // 10分钟超时
@@ -315,9 +269,11 @@ void CleanupInactiveClients(object? state)
 		}
 	}
 }
+
 #endregion
 
 #region 统计并输出客户端的公网IP和端口,并去重和排序, 英文方法名: CountAndOutputClientIPAndPort
+
 void CountAndOutputClientIPAndPort(StunClient? stunClient)
 {
 	if (stunClient == null) return;
@@ -325,9 +281,10 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 	var ipAndPortsDict = new Dictionary<string, ConcurrentBag<(int serverPort, int clientPort)>>
 	{
 		{
-			stunClient.InitialClientEndPoint.Address.ToString(), 
+			stunClient.InitialClientEndPoint.Address.ToString(),
 			// new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.ServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
-			new ConcurrentBag<(int serverPort, int clientPort)> { (stunClient.InitialServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
+			new ConcurrentBag<(int serverPort, int clientPort)>
+				{ (stunClient.InitialServerEndPoint.Port, stunClient.InitialClientEndPoint.Port) }
 		}
 	};
 	lock (stunClient.AdditionalClientEndPoints)
@@ -340,16 +297,20 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 			}
 			else
 			{
-				ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(), new ConcurrentBag<(int serverPort, int clientPort)> { (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
+				ipAndPortsDict.Add(ipAndPort.clientEndPoint.Address.ToString(),
+					new ConcurrentBag<(int serverPort, int clientPort)>
+						{ (ipAndPort.serverEndPoint.Port, ipAndPort.clientEndPoint.Port) });
 			}
 		}
 	}
-	
+
 	//将相同IP的端口进行去重和排序
 	var keys = ipAndPortsDict.Keys.ToList();
 	foreach (var key in keys)
 	{
-		ipAndPortsDict[key] = new ConcurrentBag<(int serverPort, int clientPort)>(ipAndPortsDict[key].Distinct().OrderBy(p => p.clientPort));
+		ipAndPortsDict[key] =
+			new ConcurrentBag<(int serverPort, int clientPort)>(ipAndPortsDict[key].Distinct()
+				.OrderBy(p => p.clientPort));
 	}
 
 	foreach (var ipAndPort in ipAndPortsDict)
@@ -372,7 +333,8 @@ void CountAndOutputClientIPAndPort(StunClient? stunClient)
 		Console.ForegroundColor = ConsoleColor.Green;
 		Console.WriteLine("恭喜,看起来客户端是全锥形或者端口受限锥形网络(这两种是我测试过的,使用同一个客户端实例连接到同一个服务器的不同端口时,客户端公网使用相同端口)");
 	}
-			
+
 	Console.ResetColor();
 }
+
 #endregion
