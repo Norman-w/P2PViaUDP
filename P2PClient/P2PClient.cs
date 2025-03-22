@@ -185,7 +185,9 @@ public class P2PClient
 		if (isSymmetricCheckingResult == NATTypeEnum.Symmetric)
 		{
 			_myNATType = NATTypeEnum.Symmetric;
-			Console.WriteLine("检测到对称型NAT,不需要测试了");
+			Console.ForegroundColor = ConsoleColor.DarkRed;
+			Console.WriteLine("🛡🛡🛡检测到对称型NAT,不需要测试了🛡🛡🛡");
+			Console.ResetColor();
 			return;
 		}
 		if (isSymmetricCheckingResult == NATTypeEnum.Unknown)
