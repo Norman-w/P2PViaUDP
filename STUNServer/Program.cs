@@ -420,7 +420,9 @@ void MainStunServerProcessWhichKindOfConeCheckingRequest(
 		);
 		var mainToSlaveByPassResponseBytes = mainToSlaveByPassResponse.ToBytes();
 		mainStunToSlaveStunMainServerSideSender.Send(mainToSlaveByPassResponseBytes, mainToSlaveByPassResponseBytes.Length, new IPEndPoint(IPAddress.Parse(settings.SlaveServerInternalIP), settings.SlaveServerReceiveMainServerBytesPort));
-		Console.WriteLine($"主STUN服务器 的端口{serverPort} 向从STUN服务器的端口{settings.SlaveServerReceiveMainServerBytesPort} 发送了透传消息");
+		Console.ForegroundColor = ConsoleColor.Cyan;
+		Console.WriteLine($"主STUN服务器 向从STUN服务器的端口{settings.SlaveServerReceiveMainServerBytesPort} 发送了透传消息");
+		Console.ResetColor();
 	}
 	else
 	{
@@ -440,6 +442,9 @@ void MainStunServerProcessWhichKindOfConeCheckingRequest(
 //只有从STUN服务器会触发调用这个端口,当主服务器给从服务器发送了具体哪种锥形检测的消息包时,从服务器会接收到这个消息包,然后处理(修改远端信息)后转发给客户端
 void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult ar)
 {
+	Console.ForegroundColor = ConsoleColor.Cyan;
+	Console.WriteLine("从STUN服务器收到了主STUN服务器的透传消息");
+	Console.ResetColor();
 	if (ar.AsyncState == null)
 	{
 		Console.WriteLine("在ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback中无法获取服务器实例");

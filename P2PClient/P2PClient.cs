@@ -303,7 +303,8 @@ public class P2PClient
 		    && fromSlaveServerPrimaryPort != null 
 		    && fromSlaveServerSecondaryPort != null)
 		{
-			Console.WriteLine("有4个回信是从主服务器的主端口从端口以及从服务器的主端口从端口的,那就是全锥形的 啥都可以访问的");
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine("🎉🎉🎉🎉有4个回信是从主服务器的主端口从端口以及从服务器的主端口从端口的,那就是全锥形的 啥都可以访问的🎉🎉🎉🎉");
 			return NATTypeEnum.FullCone;
 		}
 
