@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using P2PViaUDP.Model;
@@ -21,6 +22,15 @@ Console.WriteLine("Hello, STUNServer!");
 #region 服务端端口监听器
 
 var settings = STUNServerConfig.Default;
+
+#region 测试用,如果当前是调试器附加的,则当前服务器是从服务器
+
+if (Debugger.IsAttached)
+{
+	settings.IsSlaveServer = true;
+}
+
+#endregion
 
 var isSlaveServer = settings.IsSlaveServer;
 var primaryPort = settings.MainServerAndSlaveServerPrimaryPort;
