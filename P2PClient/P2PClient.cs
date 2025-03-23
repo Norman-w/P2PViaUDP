@@ -118,7 +118,7 @@ public class P2PClient
 
 		var serverEndPoint = new IPEndPoint(
 			IPAddress.Parse(_settings.STUNMainServerIP),
-			_settings.STUNMainServerSecondaryPort
+			_settings.STUNMainAndSlaveServerPrimaryPort
 		);
 
 		#endregion
@@ -134,8 +134,68 @@ public class P2PClient
 		);
 
 		#endregion
+		
+		#region 第一轮测试,先测试是什么锥形,只给主服务器的主端口发送一条消息,看看能从哪些路径回来.
+		
+		var whichKindOfConeNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
+			Guid.NewGuid(),
+			StunNATTypeCheckingRequest.SubCheckingTypeEnum.WhichKindOfCone,
+			_clientId,
+			serverEndPoint,
+			DateTime.Now
+		);
+		var whichKindOfConeNATTypeCheckingRequestBytes = whichKindOfConeNATTypeCheckingRequest.ToBytes();
+		//只需要发送给主服务器的主要端口.主服务器接收到消息以后会转发到从服务器,然后主服务器的两个端口尝试返回,从服务器的两个端口尝试返回.
+		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes, whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
+		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(5000);
+		_myNATType = whichKindOfConeCheckingResult;
+		#endregion
+		
+		if (whichKindOfConeCheckingResult == NATTypeEnum.Unknown)
+		{
+			Console.ForegroundColor = ConsoleColor.Yellow;
+			Console.WriteLine("经过 [是哪种锥形]的测试,无法确定NAT类型,需要进入下一轮测试");
+			Console.ResetColor();
+		}
 
-		#region 发送STUN请求消息
+		#region 如果是检测到了漩口受限型的,还不能完全确定就是端口受限,有可能是对称型的.其他的就可以直接结束测试了
+
+		if (whichKindOfConeCheckingResult == NATTypeEnum.FullCone)
+		{
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine("🎉🎉🎉🎉检测到全锥形NAT,不需要测试了🎉🎉🎉🎉");
+			Console.ResetColor();
+			return;
+		}
+		if (whichKindOfConeCheckingResult == NATTypeEnum.RestrictedCone)
+		{
+			Console.ForegroundColor = ConsoleColor.DarkBlue;
+			Console.WriteLine("🌏🌏🌏检测到IP限制型NAT(相同IP端口不受限),不需要测试了🌏🌏🌏");
+			Console.ResetColor();
+			return;
+		}
+
+		if (whichKindOfConeCheckingResult == NATTypeEnum.PortRestrictedCone)
+		{
+			Console.ForegroundColor = ConsoleColor.DarkYellow;
+			Console.WriteLine("🤯🤯🤯检测到端口限制型NAT(相同IP端口受限,有可能还是对称型的<出网端口都不一样>),需要进入下一轮测试🤯🤯🤯");
+			Console.ResetColor();
+		}
+
+		#endregion
+
+		return;
+		Console.ForegroundColor = ConsoleColor.Gray;
+		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
+		Console.ResetColor();
+		
+		
+		#region 进行是否是对称型NAT的一轮测试
+		//先清空上一轮所有的已经检测到的我的公网IP和端口记录,进行下面的测试
+		_myEndPointFromMainStunMainPortReply = null;
+		_myEndPointFromMainStunSecondaryPortReply = null;
+		_myEndPointFromSlaveStunMainPortReply = null;
+		_myEndPointFromSlaveStunSecondaryPortReply = null;
 
 		var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
 		// await _udpClient.SendAsync(isSymmetricNATTypeCheckingRequestBytes, isSymmetricNATTypeCheckingRequestBytes.Length, serverEndPoint);
@@ -184,42 +244,29 @@ public class P2PClient
 		}
 		Console.WriteLine("所有的STUN请求消息已发送");
 		#endregion
-
+		
 		var isSymmetricCheckingResult = await ReceiveIsSymmetricCheckingRequestStunResponses(2000);
+		
 		if (isSymmetricCheckingResult == NATTypeEnum.Symmetric)
 		{
 			_myNATType = NATTypeEnum.Symmetric;
 			Console.ForegroundColor = ConsoleColor.DarkRed;
 			Console.WriteLine("🛡🛡🛡检测到对称型NAT,不需要测试了🛡🛡🛡");
 			Console.ResetColor();
-			return;
 		}
-		if (isSymmetricCheckingResult == NATTypeEnum.Unknown)
+		else if (isSymmetricCheckingResult == NATTypeEnum.Unknown)
 		{
-			Console.WriteLine("经过第一轮测试,无法确定NAT类型,需要进入下一轮测试");
+			Console.ForegroundColor = ConsoleColor.Yellow;
+			Console.WriteLine("经过 [是否对称型]的测试,无法确定NAT类型,需要进入下一轮测试 (但我们目前没有别的测试了,TBD)");
+			Console.ResetColor();
 		}
-
-		#region 经过第一轮测试没有确定下来是对称型的NAT的话,继续进行其他三类的测试
-		
-		//先清空第一轮所有的已经检测到的我的公网IP和端口记录,进行第二轮
-		_myEndPointFromMainStunMainPortReply = null;
-		_myEndPointFromMainStunSecondaryPortReply = null;
-		_myEndPointFromSlaveStunMainPortReply = null;
-		_myEndPointFromSlaveStunSecondaryPortReply = null;
-
-		var whichKindOfConeNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
-			Guid.NewGuid(),
-			StunNATTypeCheckingRequest.SubCheckingTypeEnum.WhichKindOfCone,
-			_clientId,
-			serverEndPoint,
-			DateTime.Now
-		);
-		var whichKindOfConeNATTypeCheckingRequestBytes = whichKindOfConeNATTypeCheckingRequest.ToBytes();
-		//只需要发送给主服务器的主要端口.主服务器接收到消息以后会转发到从服务器,然后主服务器的两个端口尝试返回,从服务器的两个端口尝试返回.
-		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes, whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
-		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(2000);
-		_myNATType = whichKindOfConeCheckingResult;
-		#endregion
+		else
+		{
+			_myNATType = isSymmetricCheckingResult;
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine($"🎉🎉🎉🎉检测到 {_myNATType} 类型的NAT🎉🎉🎉🎉");
+			Console.ResetColor();
+		}
 	}
 
 	private async Task<NATTypeEnum> ReceiveWhichKindOfConeCheckingRequestStunResponses(int timeoutMs)
@@ -287,7 +334,7 @@ public class P2PClient
 			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort);
 		var fromSlaveServerSecondaryPort = responses.FirstOrDefault(r =>
 			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort);
-		Console.WriteLine("以下是第二轮检测从的服务端回访来源信息:");
+		Console.WriteLine("以下是 [哪种锥形] 检测从的服务端回访来源信息:");
 		Console.ForegroundColor = ConsoleColor.DarkYellow;
 		if (fromMainServerPrimaryPort != null)
 		{
@@ -335,7 +382,7 @@ public class P2PClient
 			return NATTypeEnum.FullCone;
 		}
 
-		Console.WriteLine("第二轮检测中无法确定NAT类型");
+		Console.WriteLine("[哪种锥形] 检测中无法确定NAT类型");
 		return NATTypeEnum.Unknown;
 	}
 
@@ -397,7 +444,7 @@ public class P2PClient
 
 	private void ProcessWhichKindOfConeStunNATTypeCheckingResponse(StunNATTypeCheckingResponse response)
 	{
-		Console.WriteLine($"第二轮检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer?"主":"从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
+		Console.WriteLine($"检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer?"主":"从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
 		if (response.IsFromMainSTUNServer)
 		{
 			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
