@@ -301,6 +301,7 @@ public class TurnServer
 		}
 		else
 		{
+			Console.WriteLine($"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}");
 			// 对称形 <-> 对称形
 			isBothNeedPassiveDoHolePunching = true;
 			active = null;
