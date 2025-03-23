@@ -55,6 +55,8 @@ public class P2PClient
 	private readonly Guid _clientId = Guid.NewGuid();
 	private bool _isRunning;
 
+	private List<StunNATTypeCheckingResponse> natTypeCheckingResponses = new();
+
 	#endregion
 
 	#region 启动和停止
@@ -80,7 +82,7 @@ public class P2PClient
 		{
 			// STUN 阶段
 			await RequestStunServerAsync();
-			
+
 			// TURN 阶段
 			await RegisterToTurnServerAsync();
 
@@ -102,8 +104,6 @@ public class P2PClient
 	#endregion
 
 	#region STUN 流程控制
-
-	#region 请求STUN服务器
 
 	private async Task RequestStunServerAsync()
 	{
@@ -134,9 +134,9 @@ public class P2PClient
 		);
 
 		#endregion
-		
+
 		#region 第一轮测试,先测试是什么锥形,只给主服务器的主端口发送一条消息,看看能从哪些路径回来.
-		
+
 		var whichKindOfConeNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
 			Guid.NewGuid(),
 			StunNATTypeCheckingRequest.SubCheckingTypeEnum.WhichKindOfCone,
@@ -146,11 +146,13 @@ public class P2PClient
 		);
 		var whichKindOfConeNATTypeCheckingRequestBytes = whichKindOfConeNATTypeCheckingRequest.ToBytes();
 		//只需要发送给主服务器的主要端口.主服务器接收到消息以后会转发到从服务器,然后主服务器的两个端口尝试返回,从服务器的两个端口尝试返回.
-		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes, whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
-		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(5000);
+		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes,
+			whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
+		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(2000);
 		_myNATType = whichKindOfConeCheckingResult;
+
 		#endregion
-		
+
 		if (whichKindOfConeCheckingResult == NATTypeEnum.Unknown)
 		{
 			Console.ForegroundColor = ConsoleColor.Yellow;
@@ -167,6 +169,7 @@ public class P2PClient
 			Console.ResetColor();
 			return;
 		}
+
 		if (whichKindOfConeCheckingResult == NATTypeEnum.RestrictedCone)
 		{
 			Console.ForegroundColor = ConsoleColor.DarkBlue;
@@ -187,9 +190,10 @@ public class P2PClient
 		Console.ForegroundColor = ConsoleColor.Gray;
 		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
 		Console.ResetColor();
-		
-		
+
+
 		#region 进行是否是对称型NAT的一轮测试
+
 		//先清空上一轮所有的已经检测到的我的公网IP和端口记录,进行下面的测试
 		_myEndPointFromMainStunMainPortReply = null;
 		_myEndPointFromMainStunSecondaryPortReply = null;
@@ -197,75 +201,41 @@ public class P2PClient
 		_myEndPointFromSlaveStunSecondaryPortReply = null;
 
 		var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
-		// await _udpClient.SendAsync(isSymmetricNATTypeCheckingRequestBytes, isSymmetricNATTypeCheckingRequestBytes.Length, serverEndPoint);
+		await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
 
-		// 创建所有发送任务,分别发送到4个服务器端点
-		var sendTasks = new[]
-		{
-			// 主服务器主端口
-			_udpClient.SendAsync(
-				isSymmetricNATTypeCheckingRequestBytes,
-				isSymmetricNATTypeCheckingRequestBytes.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP),
-					_settings.STUNMainAndSlaveServerPrimaryPort)
-			),
-
-			// 主服务器次端口
-			_udpClient.SendAsync(
-				isSymmetricNATTypeCheckingRequestBytes,
-				isSymmetricNATTypeCheckingRequestBytes.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP),
-					_settings.STUNMainServerSecondaryPort)
-			),
-
-			// 从服务器主端口
-			_udpClient.SendAsync(
-				isSymmetricNATTypeCheckingRequestBytes,
-				isSymmetricNATTypeCheckingRequestBytes.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP),
-					_settings.STUNMainAndSlaveServerPrimaryPort)
-			),
-
-			// 从服务器次端口
-			_udpClient.SendAsync(
-				isSymmetricNATTypeCheckingRequestBytes,
-				isSymmetricNATTypeCheckingRequestBytes.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP),
-					_settings.STUNSlaveServerSecondaryPort)
-			)
-		};
-
-		// 并行执行所有发送任务,只要有一个发送成功就进入到接收状态防止漏掉消息.
-		// foreach (var task in sendTasks)
-		// {
-		// 	await task;
-		// 	await Task.Delay(100);
-		// }
-		await Task.WhenAll(sendTasks);
-		Console.WriteLine("所有的STUN请求消息已发送");
-		#endregion
+		natTypeCheckingResponses.Clear();
+		var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
 		
-		var isSymmetricCheckingResult = await ReceiveIsSymmetricCheckingRequestStunResponses(2000);
-		
-		if (isSymmetricCheckingResult == NATTypeEnum.Symmetric)
+		try
 		{
-			_myNATType = NATTypeEnum.Symmetric;
-			Console.ForegroundColor = ConsoleColor.DarkRed;
-			Console.WriteLine("🛡🛡🛡检测到对称型NAT,不需要测试了🛡🛡🛡");
-			Console.ResetColor();
+			while (!cts.Token.IsCancellationRequested)
+			{
+				try
+				{
+					var result = await _udpClient.ReceiveAsync(cts.Token);
+					var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
+					Console.WriteLine(
+						$"收到STUN响应: {result.RemoteEndPoint}, 报告的外网信息: {response.DetectedClientNATEndPoint}");
+					ProcessIsSymmetricStunNATTypeCheckingResponse(response);
+					
+					if (natTypeCheckingResponses.Count >= 4) // 如果收到了所有预期的响应
+					{
+						break;
+					}
+				}
+				catch (OperationCanceledException)
+				{
+					break;
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine($"接收响应时发生错误: {ex.Message}");
+				}
+			}
 		}
-		else if (isSymmetricCheckingResult == NATTypeEnum.Unknown)
+		finally
 		{
-			Console.ForegroundColor = ConsoleColor.Yellow;
-			Console.WriteLine("经过 [是否对称型]的测试,无法确定NAT类型,需要进入下一轮测试 (但我们目前没有别的测试了,TBD)");
-			Console.ResetColor();
-		}
-		else
-		{
-			_myNATType = isSymmetricCheckingResult;
-			Console.ForegroundColor = ConsoleColor.Green;
-			Console.WriteLine($"🎉🎉🎉🎉检测到 {_myNATType} 类型的NAT🎉🎉🎉🎉");
-			Console.ResetColor();
+			cts.Dispose();
 		}
 	}
 
@@ -315,7 +285,7 @@ public class P2PClient
 		{
 			cts.Cancel();
 		}
-		
+
 		return AnalyzeWhichKindOfConeCheckingResponses(responses);
 	}
 
@@ -340,40 +310,45 @@ public class P2PClient
 		{
 			Console.WriteLine($"主服务器主端口: {fromMainServerPrimaryPort.StunServerEndPoint}");
 		}
+
 		if (fromMainServerSecondaryPort != null)
 		{
 			Console.WriteLine($"主服务器次要端口: {fromMainServerSecondaryPort.StunServerEndPoint}");
 		}
+
 		if (fromSlaveServerPrimaryPort != null)
 		{
 			Console.WriteLine($"从服务器主端口: {fromSlaveServerPrimaryPort.StunServerEndPoint}");
 		}
+
 		if (fromSlaveServerSecondaryPort != null)
 		{
 			Console.WriteLine($"从服务器次要端口: {fromSlaveServerSecondaryPort.StunServerEndPoint}");
 		}
+
 		Console.ResetColor();
-		
-		if (fromMainServerPrimaryPort != null 
-		    && fromMainServerSecondaryPort == null 
-		    && fromSlaveServerPrimaryPort == null 
+
+		if (fromMainServerPrimaryPort != null
+		    && fromMainServerSecondaryPort == null
+		    && fromSlaveServerPrimaryPort == null
 		    && fromSlaveServerSecondaryPort == null)
 		{
 			Console.WriteLine("只有一个回信,是从主服务器的主端口返回的,那么就是IP限制+端口限制型的");
 			return NATTypeEnum.PortRestrictedCone;
 		}
 
-		if (fromMainServerPrimaryPort != null 
-		    && fromMainServerSecondaryPort != null 
-		    && fromSlaveServerPrimaryPort == null 
+		if (fromMainServerPrimaryPort != null
+		    && fromMainServerSecondaryPort != null
+		    && fromSlaveServerPrimaryPort == null
 		    && fromSlaveServerSecondaryPort == null)
 		{
 			Console.WriteLine("只有主服务器的2个端口返回的,那就就是IP限制型的");
 			return NATTypeEnum.RestrictedCone;
 		}
-		if (fromMainServerPrimaryPort != null 
-		    && fromMainServerSecondaryPort != null 
-		    && fromSlaveServerPrimaryPort != null 
+
+		if (fromMainServerPrimaryPort != null
+		    && fromMainServerSecondaryPort != null
+		    && fromSlaveServerPrimaryPort != null
 		    && fromSlaveServerSecondaryPort != null)
 		{
 			Console.ForegroundColor = ConsoleColor.Green;
@@ -389,54 +364,82 @@ public class P2PClient
 	public async Task<NATTypeEnum> ReceiveIsSymmetricCheckingRequestStunResponses(int timeoutMs)
 	{
 		var responses = new List<StunNATTypeCheckingResponse>();
-		var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs)); // 2秒超时
+		using var cts = new CancellationTokenSource();
+
+		// 设置总体超时
+		_ = Task.Delay(timeoutMs).ContinueWith(_ => cts.Cancel());
 
 		try
 		{
+			// 将UDP客户端设置为非阻塞模式
+			_udpClient.Client.Blocking = false;
+			_udpClient.Client.ReceiveTimeout = 0;
+
 			while (!cts.Token.IsCancellationRequested)
 			{
 				try
 				{
-					// 设置接收超时
-					var receiveTask = _udpClient.ReceiveAsync();
-					var completedTask = await Task.WhenAny(receiveTask, Task.Delay(2000, cts.Token));
-
-					if (completedTask != receiveTask)
+					// 检查是否有数据可读
+					if (!_udpClient.Client.Poll(10000, SelectMode.SelectRead))
 					{
-						Console.WriteLine("接收STUN响应超时");
-						break; // 超时退出
+						continue;
 					}
 
-					var result = await receiveTask;
-					var messageType = (MessageType)result.Buffer[0];
-
-					if (messageType == MessageType.StunNATTypeCheckingResponse)
+					// 尽可能多地读取数据
+					while (_udpClient.Available > 0 && !cts.Token.IsCancellationRequested)
 					{
-						var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
-						//输出响应中的客户端外网端点信息:
-						Console.WriteLine($"收到STUN响应: {result.RemoteEndPoint}, 报告的我的外网信息: {response.DetectedClientNATEndPoint}");
-						ProcessIsSymmetricStunNATTypeCheckingResponse(response);
-						responses.Add(response);
+						var result = await _udpClient.ReceiveAsync();
+						var messageType = (MessageType)result.Buffer[0];
 
-						// 如果收到了所有4个预期的响应，提前结束
-						if (responses.Count >= 4)
+						if (messageType == MessageType.StunNATTypeCheckingResponse)
 						{
-							break;
+							var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
+							Console.WriteLine(
+								$"收到STUN响应: {result.RemoteEndPoint}, 报告的外网信息: {response.DetectedClientNATEndPoint}");
+
+							ProcessIsSymmetricStunNATTypeCheckingResponse(response);
+							responses.Add(response);
+
+							if (responses.Count >= 4)
+							{
+								Console.WriteLine("已收到所有预期响应");
+								return AnalyzeIsSymmetricCheckingResponses(responses);
+							}
 						}
 					}
+
+					// 短暂等待以避免CPU占用过高
+					await Task.Delay(1, cts.Token);
 				}
 				catch (OperationCanceledException)
 				{
-					Console.ForegroundColor = ConsoleColor.Red;
-					Console.WriteLine("接收STUN响应超时");
-					Console.ResetColor();
 					break;
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine($"接收过程发生错误: {ex.Message}");
+					// 发生错误时短暂等待
+					await Task.Delay(10, cts.Token);
 				}
 			}
 		}
 		finally
 		{
-			cts.Cancel();
+			try
+			{
+				// 恢复阻塞模式
+				_udpClient.Client.Blocking = true;
+				Console.WriteLine($"接收完成，共收到 {responses.Count} 个响应");
+			}
+			catch (ObjectDisposedException)
+			{
+				// 忽略已释放的对象异常
+			}
+		}
+
+		if (responses.Count < 4)
+		{
+			Console.WriteLine($"警告：预期接收4个响应，实际只收到 {responses.Count} 个");
 		}
 
 		return AnalyzeIsSymmetricCheckingResponses(responses);
@@ -444,13 +447,15 @@ public class P2PClient
 
 	private void ProcessWhichKindOfConeStunNATTypeCheckingResponse(StunNATTypeCheckingResponse response)
 	{
-		Console.WriteLine($"检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer?"主":"从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
+		Console.WriteLine(
+			$"检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer ? "主" : "从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
 		if (response.IsFromMainSTUNServer)
 		{
 			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
 				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
+
 			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
 			{
 				_myEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
@@ -510,7 +515,9 @@ public class P2PClient
 		if (responses.Count != 4)
 		{
 			Console.WriteLine($"收到的STUN响应数量不正确,应为4,实际为{responses.Count}");
+
 			#region 根据收到的ip数量判断,如果是只有一个IP收到了,报告一下是主服务器掉故障了还是从服务器.
+
 			var isMainServerError = !responses.Any(r => r.IsFromMainSTUNServer);
 			var isSlaveServerError = !responses.Any(r => r.IsFromSlaveSTUNServer);
 			if (isMainServerError)
@@ -518,13 +525,17 @@ public class P2PClient
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine("应该是主STUN服务器故障了");
 			}
+
 			if (isSlaveServerError)
 			{
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine("应该是从STUN服务器故障了");
 			}
+
 			Console.ResetColor();
+
 			#endregion
+
 			return NATTypeEnum.Unknown;
 		}
 		else
@@ -536,16 +547,19 @@ public class P2PClient
 				Console.WriteLine("没有收到主STUN服务器主端口的响应,无法确定NAT类型");
 				return NATTypeEnum.Unknown;
 			}
+
 			if (_myEndPointFromMainStunSecondaryPortReply == null)
 			{
 				Console.WriteLine("没有收到主STUN服务器次要端口的响应,无法确定NAT类型");
 				return NATTypeEnum.Unknown;
 			}
+
 			if (_myEndPointFromSlaveStunMainPortReply == null)
 			{
 				Console.WriteLine("没有收到从STUN服务器主端口的响应,无法确定NAT类型");
 				return NATTypeEnum.Unknown;
 			}
+
 			if (_myEndPointFromSlaveStunSecondaryPortReply == null)
 			{
 				Console.WriteLine("没有收到从STUN服务器次要端口的响应,无法确定NAT类型");
@@ -565,6 +579,7 @@ public class P2PClient
 				{
 					outgoingIpList.Add(ip);
 				}
+
 				if (rsp.IsFromMainSTUNServer)
 				{
 					if (!portsToMainServer.Contains(port))
@@ -590,7 +605,7 @@ public class P2PClient
 			}
 
 			#endregion
-			
+
 			#region 如果出网端口是从4个出去的就是对称型NAT
 
 			if (portsToMainServer.Count + portsToSlaveServer.Count == 4)
@@ -602,6 +617,7 @@ public class P2PClient
 			}
 
 			#endregion
+
 			Console.ForegroundColor = ConsoleColor.Green;
 			Console.WriteLine("虽然经过第一轮测试,无法确定NAT类型,需要进入下一轮测试,但是恭喜,这样的打洞成功率会高一些哦");
 			Console.ResetColor();
@@ -610,7 +626,7 @@ public class P2PClient
 			return NATTypeEnum.Unknown;
 		}
 	}
-	
+
 	#endregion
 
 	#endregion
@@ -659,10 +675,10 @@ public class P2PClient
 			Console.WriteLine("TURN注册消息已发送");
 		}
 		catch (Exception ex)
-		{
-			Console.WriteLine($"TURN注册失败: {ex}");
-			throw;
-		}
+	{
+		Console.WriteLine($"TURN注册失败: {ex}");
+		throw;
+	}
 	}
 
 	#endregion
@@ -673,17 +689,20 @@ public class P2PClient
 
 	private async Task StartListeningAsync()
 	{
+		Console.WriteLine("开始监听UDP消息...");
 		while (_isRunning)
 		{
 			try
 			{
-				var receiveResult = await _udpClient.ReceiveAsync();
-				var receiverRemoteEndPoint = receiveResult.RemoteEndPoint;
-				await ProcessReceivedMessageAsync(receiveResult.Buffer, receiverRemoteEndPoint);
+				var result = await _udpClient.ReceiveAsync();
+				await ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint);
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"接收消息错误: {ex.Message}");
+				if (_isRunning)
+				{
+					Console.WriteLine($"接收消息时发生错误: {ex.Message}");
+				}
 			}
 		}
 	}
@@ -992,4 +1011,62 @@ public class P2PClient
 	#endregion
 
 	#endregion
+
+
+	void ReceiveIsSymmetricCheckingRequestCallback(IAsyncResult ar)
+	{
+		try
+		{
+			Console.WriteLine($"正在从{_udpClient.Client.LocalEndPoint}接收STUN响应");
+			var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+			var buffer = _udpClient.EndReceive(ar, ref remoteEndPoint);
+			Console.WriteLine($"收到来自: {remoteEndPoint} 的消息，大小: {buffer.Length}, 内容: {BitConverter.ToString(buffer)}");
+			var type = (MessageType)buffer[0];
+			if (type == MessageType.StunNATTypeCheckingResponse)
+			{
+				var response = StunNATTypeCheckingResponse.FromBytes(buffer);
+				natTypeCheckingResponses.Add(response);
+				ProcessIsSymmetricStunNATTypeCheckingResponse(response);
+			}
+		}
+		catch (Exception e)
+		{
+			Console.WriteLine($"接收STUN响应时发生错误: {e.Message}");
+			throw;
+		}
+		finally
+		{
+			Console.WriteLine("继续接收STUN响应");
+			_udpClient.BeginReceive(ReceiveIsSymmetricCheckingRequestCallback, null);
+		}
+	}
+
+	private async Task SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(byte[] data)
+	{
+		var tasks = new List<Task>
+		{
+			// 主服务器主端口
+			_udpClient.SendAsync(data, data.Length, 
+				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainAndSlaveServerPrimaryPort)),
+			// 主服务器次端口
+			_udpClient.SendAsync(data, data.Length,
+				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainServerSecondaryPort)),
+			// 从服务器主端口
+			_udpClient.SendAsync(data, data.Length,
+				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNMainAndSlaveServerPrimaryPort)),
+			// 从服务器次端口
+			_udpClient.SendAsync(data, data.Length,
+				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNSlaveServerSecondaryPort))
+		};
+
+		try
+		{
+			await Task.WhenAll(tasks);
+			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到所有端口");
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"发送消息时发生错误: {ex.Message}");
+		}
+	}
 }
