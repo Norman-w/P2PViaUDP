@@ -141,6 +141,7 @@ public class STUNClient
 				{
 					try
 					{
+						Console.WriteLine("等待接收STUN响应...");
 						// 使用带超时的接收
 						var result = await _udpClient.ReceiveAsync(cts.Token);
 						var messageBytes = result.Buffer;
@@ -165,9 +166,9 @@ public class STUNClient
 							}
 						}
 					}
-					catch (OperationCanceledException)
+					catch (OperationCanceledException oce)
 					{
-						Console.WriteLine("接收操作被取消");
+						Console.WriteLine($"接收操作被取消,原因: {oce.Message}");
 						break;
 					}
 					catch (Exception ex)
@@ -212,6 +213,7 @@ public class STUNClient
 		// 确保接收任务已完成
 		if (!cts.IsCancellationRequested)
 		{
+			Console.WriteLine("是否全锥形NAT检测 的取消令牌已关闭");
 			cts.Cancel();
 		}
 
@@ -220,8 +222,8 @@ public class STUNClient
 
 		#endregion
 		MyNATType = AnalyzeIsSymmetricCheckingResponses(responseQueue.ToList());
-		Console.ForegroundColor = MyNATType == NATTypeEnum.Symmetric ? ConsoleColor.DarkRed : ConsoleColor.Gray;
-		var natTypeString = MyNATType == NATTypeEnum.Symmetric ? "🛡🛡🛡对称型🛡🛡🛡" : MyNATType.ToString();
+		Console.ForegroundColor = MyNATType == NATTypeEnum.Symmetric ? ConsoleColor.DarkRed : ConsoleColor.DarkYellow;
+		var natTypeString = MyNATType == NATTypeEnum.Symmetric ? "🛡🛡🛡对称型🛡🛡🛡" : "🤯🤯🤯端口受限型🤯🤯🤯";
 		Console.WriteLine($"**************************[是否对称型NAT]检测完成,最终确定NAT类型为: {natTypeString}**************************");
 		Console.ResetColor();
 	}
@@ -262,6 +264,7 @@ public class STUNClient
 		}
 		finally
 		{
+			Console.WriteLine($"已结束 [哪种锥形] 检测, 关闭接收超时上下文控制器");
 			cts.Cancel();
 		}
 
@@ -418,12 +421,14 @@ public class STUNClient
 			{
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine("应该是主STUN服务器故障了");
+				throw new Exception("主STUN服务器故障了");
 			}
 
 			if (isSlaveServerError)
 			{
 				Console.ForegroundColor = ConsoleColor.DarkRed;
 				Console.WriteLine("应该是从STUN服务器故障了");
+				throw new Exception("从STUN服务器故障了");
 			}
 
 			Console.ResetColor();
