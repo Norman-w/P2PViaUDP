@@ -177,7 +177,11 @@ public class P2PClient
 		};
 
 		// 并行执行所有发送任务,只要有一个发送成功就进入到接收状态防止漏掉消息.
-		await Task.WhenAll(sendTasks);
+		foreach (var task in sendTasks)
+		{
+			await task;
+			await Task.Delay(100);
+		}
 		Console.WriteLine("所有的STUN请求消息已发送");
 		#endregion
 
@@ -244,7 +248,7 @@ public class P2PClient
 					if (messageType == MessageType.StunNATTypeCheckingResponse)
 					{
 						var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
-						ProcessIsSymmetricStunNATTypeCheckingResponse(response);
+						ProcessWhichKindOfConeStunNATTypeCheckingResponse(response);
 						responses.Add(response);
 
 						// 如果收到了所有4个预期的响应，提前结束
@@ -283,6 +287,26 @@ public class P2PClient
 			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort);
 		var fromSlaveServerSecondaryPort = responses.FirstOrDefault(r =>
 			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort);
+		Console.WriteLine("以下是第二轮检测从的服务端回访来源信息:");
+		Console.ForegroundColor = ConsoleColor.DarkYellow;
+		if (fromMainServerPrimaryPort != null)
+		{
+			Console.WriteLine($"主服务器主端口: {fromMainServerPrimaryPort.StunServerEndPoint}");
+		}
+		if (fromMainServerSecondaryPort != null)
+		{
+			Console.WriteLine($"主服务器次要端口: {fromMainServerSecondaryPort.StunServerEndPoint}");
+		}
+		if (fromSlaveServerPrimaryPort != null)
+		{
+			Console.WriteLine($"从服务器主端口: {fromSlaveServerPrimaryPort.StunServerEndPoint}");
+		}
+		if (fromSlaveServerSecondaryPort != null)
+		{
+			Console.WriteLine($"从服务器次要端口: {fromSlaveServerSecondaryPort.StunServerEndPoint}");
+		}
+		Console.ResetColor();
+		
 		if (fromMainServerPrimaryPort != null 
 		    && fromMainServerSecondaryPort == null 
 		    && fromSlaveServerPrimaryPort == null 
@@ -344,7 +368,7 @@ public class P2PClient
 						var response = StunNATTypeCheckingResponse.FromBytes(result.Buffer);
 						//输出响应中的客户端外网端点信息:
 						Console.WriteLine($"收到STUN响应: {result.RemoteEndPoint}, 报告的我的外网信息: {response.DetectedClientNATEndPoint}");
-						ProcessWhichKindOfConeStunNATTypeCheckingResponse(response);
+						ProcessIsSymmetricStunNATTypeCheckingResponse(response);
 						responses.Add(response);
 
 						// 如果收到了所有4个预期的响应，提前结束
@@ -373,6 +397,7 @@ public class P2PClient
 
 	private void ProcessWhichKindOfConeStunNATTypeCheckingResponse(StunNATTypeCheckingResponse response)
 	{
+		Console.WriteLine($"第二轮检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer?"主":"从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
 		if (response.IsFromMainSTUNServer)
 		{
 			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)

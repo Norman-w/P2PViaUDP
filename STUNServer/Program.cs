@@ -407,6 +407,13 @@ void MainStunServerProcessWhichKindOfConeCheckingRequest(
 			DateTime.UtcNow
 		);
 		responseBytes = responseFromMainStunSecondaryPort.ToBytes();
+
+		#region region 两个response之间有个延迟
+		const int delayBetweenMainServerPrimaryPortResponseAndMainServerSecondaryPortResponse = 200;
+		Thread.Sleep(delayBetweenMainServerPrimaryPortResponseAndMainServerSecondaryPortResponse);
+		Console.WriteLine($"主STUN服务器 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenMainServerPrimaryPortResponseAndMainServerSecondaryPortResponse}ms后再发送第二条消息");
+		#endregion
+		
 		secondaryPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
 		//转发给从服务器,从服务器收到以后还会在发出去两条消息到客户端
 		//直接创建一个链接就行
@@ -500,6 +507,11 @@ void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult 
 			//尝试从主端口给客户端发回去(当前是从服务器)
 			primaryPortServer.Send(mainPortResponseBytes, mainPortResponseBytes.Length,
 				originalResponse.DetectedClientNATEndPoint);
+			#region region 两个response之间有个延迟
+			const int delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse = 200;
+			Thread.Sleep(delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse);
+			Console.WriteLine($"从STUN服务器第二轮测试的透传返回已从端口{primaryPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse}ms后再发送第二条消息");
+			#endregion
 			//尝试从次端口给客户端发回去(当前是从服务器)
 			secondaryPortServer.Send(slavePortResponseBytes, slavePortResponseBytes.Length,
 				originalResponse.DetectedClientNATEndPoint);
