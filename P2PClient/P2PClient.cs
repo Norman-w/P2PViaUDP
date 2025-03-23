@@ -55,8 +55,6 @@ public class P2PClient
 	private readonly Guid _clientId = Guid.NewGuid();
 	private bool _isRunning;
 
-	private List<StunNATTypeCheckingResponse> natTypeCheckingResponses = new();
-
 	#endregion
 
 	#region 启动和停止
@@ -203,7 +201,6 @@ public class P2PClient
 		var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
 		await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
 
-		natTypeCheckingResponses.Clear();
 		var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
 		
 		try
@@ -217,11 +214,6 @@ public class P2PClient
 					Console.WriteLine(
 						$"收到STUN响应: {result.RemoteEndPoint}, 报告的外网信息: {response.DetectedClientNATEndPoint}");
 					ProcessIsSymmetricStunNATTypeCheckingResponse(response);
-					
-					if (natTypeCheckingResponses.Count >= 4) // 如果收到了所有预期的响应
-					{
-						break;
-					}
 				}
 				catch (OperationCanceledException)
 				{
@@ -367,7 +359,7 @@ public class P2PClient
 		using var cts = new CancellationTokenSource();
 
 		// 设置总体超时
-		_ = Task.Delay(timeoutMs).ContinueWith(_ => cts.Cancel());
+		_ = Task.Delay(timeoutMs, cts.Token).ContinueWith(_ => {  }, cts.Token);
 
 		try
 		{
@@ -1011,35 +1003,6 @@ public class P2PClient
 	#endregion
 
 	#endregion
-
-
-	void ReceiveIsSymmetricCheckingRequestCallback(IAsyncResult ar)
-	{
-		try
-		{
-			Console.WriteLine($"正在从{_udpClient.Client.LocalEndPoint}接收STUN响应");
-			var remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
-			var buffer = _udpClient.EndReceive(ar, ref remoteEndPoint);
-			Console.WriteLine($"收到来自: {remoteEndPoint} 的消息，大小: {buffer.Length}, 内容: {BitConverter.ToString(buffer)}");
-			var type = (MessageType)buffer[0];
-			if (type == MessageType.StunNATTypeCheckingResponse)
-			{
-				var response = StunNATTypeCheckingResponse.FromBytes(buffer);
-				natTypeCheckingResponses.Add(response);
-				ProcessIsSymmetricStunNATTypeCheckingResponse(response);
-			}
-		}
-		catch (Exception e)
-		{
-			Console.WriteLine($"接收STUN响应时发生错误: {e.Message}");
-			throw;
-		}
-		finally
-		{
-			Console.WriteLine("继续接收STUN响应");
-			_udpClient.BeginReceive(ReceiveIsSymmetricCheckingRequestCallback, null);
-		}
-	}
 
 	private async Task SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(byte[] data)
 	{
