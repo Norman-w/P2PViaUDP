@@ -197,6 +197,7 @@ void ReceiveCallback(IAsyncResult ar)
 		try
 		{
 			serverUdpClient.BeginReceive(ReceiveCallback, (serverPort, serverUdpClient));
+			Console.WriteLine($"已重新注册回调,端口: {serverPort}, 服务器: {serverUdpClient.Client.LocalEndPoint}");
 		}
 		catch (ObjectDisposedException)
 		{

@@ -184,7 +184,6 @@ public class P2PClient
 
 		#endregion
 
-		return;
 		Console.ForegroundColor = ConsoleColor.Gray;
 		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
 		Console.ResetColor();
@@ -237,11 +236,12 @@ public class P2PClient
 		};
 
 		// 并行执行所有发送任务,只要有一个发送成功就进入到接收状态防止漏掉消息.
-		foreach (var task in sendTasks)
-		{
-			await task;
-			await Task.Delay(100);
-		}
+		// foreach (var task in sendTasks)
+		// {
+		// 	await task;
+		// 	await Task.Delay(100);
+		// }
+		await Task.WhenAll(sendTasks);
 		Console.WriteLine("所有的STUN请求消息已发送");
 		#endregion
 		
