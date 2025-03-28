@@ -99,7 +99,7 @@ public class TurnServer
 		
 		
 */
-		Console.WriteLine($"向组内其他客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
+		Console.WriteLine($"向组内其他早期已经存在的客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
 		var thisNewClient = group.First(c => c.Guid == newClient.Guid);
 		var groupOtherClientsWithoutThisNewClient = group.Where(c => c.Guid != newClient.Guid).ToList();
 		foreach (var existInGroupEarlierClient in groupOtherClientsWithoutThisNewClient)
@@ -108,13 +108,18 @@ public class TurnServer
 			{
 				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient, true))
 				{
+					Console.WriteLine($"不需要继续发送广播消息让客户端触发打洞,跳过向 {existInGroupEarlierClient.Guid} 发送广播,因为这个客户端的类型是 {existInGroupEarlierClient.NATType}");
 					continue;
 				}
+				var isNeedPrepareAcceptIncomingConnectionForThisClient = existInGroupEarlierClient.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone;
+				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = !isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
 					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					ClientSideEndPointToTURN = thisNewClient.EndPointFromTURN,
 					Guid = thisNewClient.Guid,
+					IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
+					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 					GroupGuid = newClient.GroupGuid,
 					IsNeedHolePunchingToThisClient = true,
 					IsFullConeDetected = thisNewClient.NATType == NATTypeEnum.FullCone
@@ -138,11 +143,15 @@ public class TurnServer
 				{
 					continue;
 				}
+				var isNeedPrepareAcceptIncomingConnectionForThisClient = thisNewClient.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone;
+				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = !isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
 					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					ClientSideEndPointToTURN = existInGroupEarlierClient.EndPointFromTURN,
 					Guid = existInGroupEarlierClient.Guid,
+					IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
+					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 					GroupGuid = newClient.GroupGuid,
 					IsNeedHolePunchingToThisClient = true,
 					IsFullConeDetected = existInGroupEarlierClient.NATType == NATTypeEnum.FullCone
@@ -217,14 +226,16 @@ public class TurnServer
 
 		#endregion
 
-		if (isSendingToEarlierPair)
-		{
-			return active!.Guid == earlierPair.Guid;
-		}
-		else
-		{
-			return active!.Guid == laterPair.Guid;
-		}
+		// if (isSendingToEarlierPair)
+		// {
+		// 	return active!.Guid == earlierPair.Guid;
+		// }
+		// else
+		// {
+		// 	return active!.Guid == laterPair.Guid;
+		// }
+		//TODO 确认一下这里这样写对不对
+		return true;
 	}
 
 	/// <summary>

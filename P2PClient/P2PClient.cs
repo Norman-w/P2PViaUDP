@@ -327,6 +327,35 @@ public class P2PClient
 				return;
 			}
 
+			#region 如果广播说我需要给他先抛橄榄枝,那我就先抛橄榄枝
+
+			var needPrepareAcceptIncomingConnectionForThisClient = broadcastMessage.IsNeedPrepareAcceptIncomingConnectionForThisClient;
+			if (needPrepareAcceptIncomingConnectionForThisClient)
+			{
+				Console.WriteLine($"收到广播消息,需要我先抛橄榄枝给对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
+				var oliveBranchMessage = new P2PHeartbeatMessage(_clientId, "NORMAN P2P OLIVE BRANCH");
+				var oliveBranchBytes = oliveBranchMessage.ToBytes();
+				await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
+					broadcastMessage.ClientSideEndPointToTURN);
+				Console.WriteLine($"已发送橄榄枝消息到: {broadcastMessage.ClientSideEndPointToTURN}");
+				return;
+			}
+
+			#endregion
+
+			#region 如果广播说我要先等他抛橄榄枝,那我需要等待一段时间再打洞
+
+			var needWaitForPrepareAcceptIncomingConnectionForThisClient =
+				broadcastMessage.IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient;
+			if (needWaitForPrepareAcceptIncomingConnectionForThisClient)
+			{
+				Console.WriteLine($"收到广播消息,需要我等待对方抛橄榄枝: {broadcastMessage.ClientSideEndPointToTURN}");
+				await Task.Delay(1000);
+				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方: {broadcastMessage.ClientSideEndPointToTURN}");
+			}
+
+			#endregion
+
 			var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
 			{
 				SourceEndPoint = _myEndPointFromMainStunMainPortReply,
