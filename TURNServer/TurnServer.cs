@@ -246,6 +246,7 @@ public class TurnServer
 		out string errorMessage)
 	{
 		/*
+		 //TODO 该说明已经不准确,等待更新.下面的代码是正确的.
 	 打洞顺序说明:
 	 当两端是
 	 全锥形 <-> IP受限/端口受限/对称形
@@ -259,45 +260,128 @@ public class TurnServer
 	 对称型 <-> 对称型
 		无法打洞,使用TURN服务器中继
 	 */
-		if (earlierPair.NATType == NATTypeEnum.FullCone)
+		var fullConePair = laterPair.NATType == NATTypeEnum.FullCone ? laterPair : null;
+		var fullConePairAnOther = earlierPair.NATType == NATTypeEnum.FullCone ? earlierPair : null;
+		var restrictedConePair = laterPair.NATType  == NATTypeEnum.RestrictedCone
+			? laterPair
+			: earlierPair.NATType == NATTypeEnum.RestrictedCone
+				? earlierPair
+				: null;
+		var restrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.RestrictedCone
+			? earlierPair
+			: laterPair.NATType == NATTypeEnum.RestrictedCone
+				? laterPair
+				: null;
+		var portRestrictedConePair = laterPair.NATType == NATTypeEnum.PortRestrictedCone
+			? laterPair
+			: earlierPair.NATType == NATTypeEnum.PortRestrictedCone
+				? earlierPair
+				: null;
+		var portRestrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.PortRestrictedCone
+			? earlierPair
+			: laterPair.NATType == NATTypeEnum.PortRestrictedCone
+				? laterPair
+				: null;
+		var symmetricPair = laterPair.NATType == NATTypeEnum.Symmetric
+			? laterPair
+			: earlierPair.NATType == NATTypeEnum.Symmetric
+				? earlierPair
+				: null;
+		var symmetricPairAnOther = earlierPair.NATType == NATTypeEnum.Symmetric
+			? earlierPair
+			: laterPair.NATType == NATTypeEnum.Symmetric
+				? laterPair
+				: null;
+		if (fullConePair != null && fullConePairAnOther != null)
 		{
-			if (laterPair.NATType == NATTypeEnum.FullCone)
-			{
-				// 全锥形 <-> 全锥形
-				active = earlierPair;
-				passive = laterPair;
-			}
-			else
-			{
-				// 全锥形 <-> IP受限/端口受限/对称形
-				active = laterPair;
-				passive = earlierPair;
-			}
+			// 全锥形 <-> 全锥形
 			isBothNeedPassiveDoHolePunching = false;
+			active = fullConePairAnOther;
+			passive = fullConePair;
 			errorMessage = string.Empty;
 			return true;
 		}
 
-		if (earlierPair.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone)
+		if (fullConePair != null && restrictedConePair != null)
 		{
-			if (laterPair.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone)
-			{
-				// IP受限/端口受限 <-> IP受限/端口受限
-				isBothNeedPassiveDoHolePunching = true;
-				active = null;
-				passive = null;
-				errorMessage = string.Empty;
-				return true;
-			}
-			else
-			{
-				// 对称形 <-> IP受限/端口受限
-				isBothNeedPassiveDoHolePunching = false;
-				active = earlierPair;
-				passive = laterPair;
-				errorMessage = string.Empty;
-				return true;
-			}
+			// 全锥形 <-> IP受限受限
+			isBothNeedPassiveDoHolePunching = false;
+			active = restrictedConePair;
+			passive = fullConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (fullConePair != null && portRestrictedConePair != null)
+		{
+			// 全锥形 <-> 端口受限
+			isBothNeedPassiveDoHolePunching = false;
+			active = portRestrictedConePair;
+			passive = fullConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (fullConePair != null && symmetricPair != null)
+		{
+			// 全锥形 <-> 对称形
+			isBothNeedPassiveDoHolePunching = false;
+			active = symmetricPair;
+			passive = fullConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (restrictedConePair != null && restrictedConePairAnOther != null)
+		{
+			// IP受限 <-> IP受限
+			isBothNeedPassiveDoHolePunching = true;
+			active = restrictedConePairAnOther;
+			passive = restrictedConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (restrictedConePair != null && portRestrictedConePair != null)
+		{
+			// IP受限 <-> 端口受限
+			isBothNeedPassiveDoHolePunching = true;
+			active = portRestrictedConePair;
+			passive = restrictedConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (restrictedConePair != null && symmetricPair != null)
+		{
+			// IP受限 <-> 对称形
+			isBothNeedPassiveDoHolePunching = false;
+			active = symmetricPair;
+			passive = restrictedConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (portRestrictedConePair != null && portRestrictedConePairAnOther != null)
+		{
+			// 端口受限 <-> 端口受限
+			isBothNeedPassiveDoHolePunching = true;
+			active = portRestrictedConePairAnOther;
+			passive = portRestrictedConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (portRestrictedConePair != null && symmetricPair != null)
+		{
+			// 端口受限 <-> 对称形
+			isBothNeedPassiveDoHolePunching = false;
+			active = symmetricPair;
+			passive = portRestrictedConePair;
+			errorMessage = string.Empty;
+			return true;
+		}
+		if (symmetricPair != null && symmetricPairAnOther != null)
+		{
+			// 对称形 <-> 对称形
+			isBothNeedPassiveDoHolePunching = false;
+			active = null;
+			passive = null;
+			errorMessage = "对称形之间无法打洞";
+			return false;
 		}
 		else
 		{
