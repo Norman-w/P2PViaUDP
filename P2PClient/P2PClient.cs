@@ -277,7 +277,7 @@ public class P2PClient
 			#region 因为我已经收到他的打洞消息请求了,所以他就是能发消息给我,我只需要按照他原来的路径给它开一个线程持续发送心跳就行保活就可以了
 
 			Console.WriteLine($"我是打洞的被动方,我已经给他发送了打洞响应消息: {holePunchingResponseMessage},下面开始给他发送心跳包");
-			Thread.Sleep(1000);
+			Thread.Sleep(200);
 			// 然后我开启一个新的线程去给他发送我的心跳包给他
 			ContinuousSendP2PHeartbeatMessagesAsync(receiverRemoteEndPoint);
 
@@ -366,7 +366,7 @@ public class P2PClient
 			if (needWaitForPrepareAcceptIncomingConnectionForThisClient)
 			{
 				Console.WriteLine($"收到广播消息,需要我等待对方抛橄榄枝: {broadcastMessage.ClientSideEndPointToTURN}");
-				await Task.Delay(1000);
+				await Task.Delay(200);
 				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方: {broadcastMessage.ClientSideEndPointToTURN}");
 			}
 
