@@ -238,6 +238,7 @@ public class TurnServer
 	/// <param name="active">主动的客户端</param>
 	/// <param name="passive">被动的客户端</param>
 	/// <param name="errorMessage">当出现错误时的错误信息</param>
+	/// <exception cref="ArgumentOutOfRangeException"></exception>
 	/// <returns>是否出现错误</returns>
 	private static bool DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 		TURNClient earlierPair, TURNClient laterPair,
@@ -260,38 +261,111 @@ public class TurnServer
 	 对称型 <-> 对称型
 		无法打洞,使用TURN服务器中继
 	 */
-		var fullConePair = laterPair.NATType == NATTypeEnum.FullCone ? laterPair : null;
-		var fullConePairAnOther = earlierPair.NATType == NATTypeEnum.FullCone ? earlierPair : null;
-		var restrictedConePair = laterPair.NATType  == NATTypeEnum.RestrictedCone
-			? laterPair
-			: earlierPair.NATType == NATTypeEnum.RestrictedCone
-				? earlierPair
-				: null;
-		var restrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.RestrictedCone
-			? earlierPair
-			: laterPair.NATType == NATTypeEnum.RestrictedCone
-				? laterPair
-				: null;
-		var portRestrictedConePair = laterPair.NATType == NATTypeEnum.PortRestrictedCone
-			? laterPair
-			: earlierPair.NATType == NATTypeEnum.PortRestrictedCone
-				? earlierPair
-				: null;
-		var portRestrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.PortRestrictedCone
-			? earlierPair
-			: laterPair.NATType == NATTypeEnum.PortRestrictedCone
-				? laterPair
-				: null;
-		var symmetricPair = laterPair.NATType == NATTypeEnum.Symmetric
-			? laterPair
-			: earlierPair.NATType == NATTypeEnum.Symmetric
-				? earlierPair
-				: null;
-		var symmetricPairAnOther = earlierPair.NATType == NATTypeEnum.Symmetric
-			? earlierPair
-			: laterPair.NATType == NATTypeEnum.Symmetric
-				? laterPair
-				: null;
+		// var fullConePair = laterPair.NATType == NATTypeEnum.FullCone ? laterPair : null;
+		// var fullConePairAnOther = earlierPair.NATType == NATTypeEnum.FullCone ? earlierPair : null;
+		// var restrictedConePair = laterPair.NATType  == NATTypeEnum.RestrictedCone
+		// 	? laterPair
+		// 	: earlierPair.NATType == NATTypeEnum.RestrictedCone
+		// 		? earlierPair
+		// 		: null;
+		// var restrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.RestrictedCone
+		// 	? earlierPair
+		// 	: laterPair.NATType == NATTypeEnum.RestrictedCone
+		// 		? laterPair
+		// 		: null;
+		// var portRestrictedConePair = laterPair.NATType == NATTypeEnum.PortRestrictedCone
+		// 	? laterPair
+		// 	: earlierPair.NATType == NATTypeEnum.PortRestrictedCone
+		// 		? earlierPair
+		// 		: null;
+		// var portRestrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.PortRestrictedCone
+		// 	? earlierPair
+		// 	: laterPair.NATType == NATTypeEnum.PortRestrictedCone
+		// 		? laterPair
+		// 		: null;
+		// var symmetricPair = laterPair.NATType == NATTypeEnum.Symmetric
+		// 	? laterPair
+		// 	: earlierPair.NATType == NATTypeEnum.Symmetric
+		// 		? earlierPair
+		// 		: null;
+		// var symmetricPairAnOther = earlierPair.NATType == NATTypeEnum.Symmetric
+		// 	? earlierPair
+		// 	: laterPair.NATType == NATTypeEnum.Symmetric
+		// 		? laterPair
+		// 		: null;
+		TURNClient? fullConePair = null, fullConePairAnOther = null;
+		TURNClient? restrictedConePair = null , restrictedConePairAnOther = null;
+		TURNClient? portRestrictedConePair = null, portRestrictedConePairAnOther = null;
+		TURNClient? symmetricPair = null, symmetricPairAnOther = null;
+		switch (laterPair.NATType)
+		{
+			case NATTypeEnum.Unknown:
+				Console.WriteLine($"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}");
+				break;
+			case NATTypeEnum.FullCone:
+				fullConePair = laterPair;
+				break;
+			case NATTypeEnum.RestrictedCone:
+				restrictedConePair = laterPair;
+				break;
+			case NATTypeEnum.PortRestrictedCone:
+				restrictedConePair = laterPair;
+				break;
+			case NATTypeEnum.Symmetric:
+				symmetricPair = laterPair;
+				break;
+			default:
+				throw new ArgumentOutOfRangeException($"在决定主动和被动时出现了未知的NAT类型: {laterPair.NATType}");
+		}
+
+		switch (earlierPair.NATType)
+		{
+			case NATTypeEnum.Unknown:
+				Console.WriteLine($"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}");
+				break;
+			case NATTypeEnum.FullCone:
+				if(fullConePair != null)
+				{
+					fullConePairAnOther = earlierPair;
+				}
+				else
+				{
+					fullConePair = earlierPair;
+				}
+				break;
+			case NATTypeEnum.RestrictedCone:
+				if(restrictedConePair != null)
+				{
+					restrictedConePairAnOther = earlierPair;
+				}
+				else
+				{
+					restrictedConePair = earlierPair;
+				}
+				break;
+			case NATTypeEnum.PortRestrictedCone:
+				if(portRestrictedConePair != null)
+				{
+					portRestrictedConePairAnOther = earlierPair;
+				}
+				else
+				{
+					portRestrictedConePair = earlierPair;
+				}
+				break;
+			case NATTypeEnum.Symmetric:
+				if(symmetricPair != null)
+				{
+					symmetricPairAnOther = earlierPair;
+				}
+				else
+				{
+					symmetricPair = earlierPair;
+				}
+				break;
+			default:
+				throw new ArgumentOutOfRangeException($"在决定主动和被动时出现了未知的NAT类型: {earlierPair.NATType}");
+		}
 		if (fullConePair != null && fullConePairAnOther != null)
 		{
 			// 全锥形 <-> 全锥形
