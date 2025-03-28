@@ -299,6 +299,7 @@ public class TurnServer
 			active = fullConePairAnOther;
 			passive = fullConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 
@@ -309,6 +310,7 @@ public class TurnServer
 			active = restrictedConePair;
 			passive = fullConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (fullConePair != null && portRestrictedConePair != null)
@@ -318,6 +320,7 @@ public class TurnServer
 			active = portRestrictedConePair;
 			passive = fullConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (fullConePair != null && symmetricPair != null)
@@ -327,6 +330,7 @@ public class TurnServer
 			active = symmetricPair;
 			passive = fullConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && restrictedConePairAnOther != null)
@@ -336,6 +340,7 @@ public class TurnServer
 			active = restrictedConePairAnOther;
 			passive = restrictedConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && portRestrictedConePair != null)
@@ -345,6 +350,7 @@ public class TurnServer
 			active = portRestrictedConePair;
 			passive = restrictedConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && symmetricPair != null)
@@ -354,6 +360,7 @@ public class TurnServer
 			active = symmetricPair;
 			passive = restrictedConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (portRestrictedConePair != null && portRestrictedConePairAnOther != null)
@@ -363,6 +370,7 @@ public class TurnServer
 			active = portRestrictedConePairAnOther;
 			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (portRestrictedConePair != null && symmetricPair != null)
@@ -372,6 +380,7 @@ public class TurnServer
 			active = symmetricPair;
 			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
+			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (symmetricPair != null && symmetricPairAnOther != null)
@@ -381,6 +390,7 @@ public class TurnServer
 			active = null;
 			passive = null;
 			errorMessage = "对称形之间无法打洞";
+			Console.WriteLine($"主动方类型: {active?.NATType}, 被动方类型: {passive?.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return false;
 		}
 		else
