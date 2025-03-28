@@ -38,6 +38,12 @@ public class P2PClient
 	private NATTypeEnum _myNATType = NATTypeEnum.Unknown;
 	private readonly Guid _clientId = Guid.NewGuid();
 	private bool _isRunning;
+	private STUNClient _stunClient;
+
+	public P2PClient()
+	{
+		_stunClient = new STUNClient(_settings, _udpClient);
+	}
 
 	#endregion
 
@@ -62,11 +68,15 @@ public class P2PClient
 
 		try
 		{
+			//发送给Localhost:65535一条消息,为了让udpClient进入到bind状态
+			await _udpClient.SendAsync(new byte[] { 0 }, 1, new IPEndPoint(IPAddress.Loopback, 65535));
+			// 持续监听
+			_ = Task.Run(StartListeningAsync);
 			// STUN 阶段
-			var stunClient = new STUNClient(_settings, _udpClient);
-			await stunClient.RequestStunServerAsync();
-			_myEndPointFromMainStunMainPortReply = stunClient.MyEndPointFromMainStunMainPortReply;
-			_myNATType = stunClient.MyNATType;
+			_stunClient = new STUNClient(_settings, _udpClient);
+			await _stunClient.RequestStunServerAsync();
+			_myEndPointFromMainStunMainPortReply = _stunClient.MyEndPointFromMainStunMainPortReply;
+			_myNATType = _stunClient.MyNATType;
 
 			// TURN 阶段
 			if (_myEndPointFromMainStunMainPortReply != null)
@@ -77,9 +87,9 @@ public class P2PClient
 				Console.WriteLine("STUN响应为空, 无法注册到TURN服务器");
 				return;
 			}
-
-			// 持续监听
-			await StartListeningAsync();
+			//等待用户退出
+			Console.WriteLine("按任意键退出...");
+			Console.ReadKey();
 		}
 		catch (Exception ex)
 		{
@@ -105,7 +115,7 @@ public class P2PClient
 			try
 			{
 				var result = await _udpClient.ReceiveAsync();
-				await ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint);
+				_ = Task.Run(() => ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint));
 			}
 			catch (Exception ex)
 			{
@@ -144,9 +154,15 @@ public class P2PClient
 			case MessageType.StunRequest:
 			case MessageType.StunResponse:
 			case MessageType.StunResponseError:
+			case MessageType.StunNATTypeCheckingRequest:
+			case MessageType.StunNATTypeCheckingResponse:
+				_stunClient.ProcessReceivedMessage(data);
+				break;
 			case MessageType.TURNRegister:
 			case MessageType.TURNServer2ClientHeartbeat:
 			case MessageType.TURNClient2ServerHeartbeat:
+				TURNClientLogic.ProcessReceivedMessage(data);
+				break;
 			case MessageType.P2PHolePunchingResponse:
 				await ProcessP2PHolePunchingResponseMessageAsync(data);
 				break;

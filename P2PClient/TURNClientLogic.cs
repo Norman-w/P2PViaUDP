@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using P2PViaUDP.Model;
 using P2PViaUDP.Model.TURN;
 using TURNServer;
 
@@ -60,4 +61,29 @@ public static class TURNClientLogic
 	#endregion
 
 	#endregion
+
+	public static void ProcessReceivedMessage(byte[] data)
+	{
+		var message = (MessageType)BitConverter.ToInt32(data, 0);
+		switch (message)
+		{
+			case MessageType.StunRequest:
+			case MessageType.StunNATTypeCheckingRequest:
+			case MessageType.StunNATTypeCheckingResponse:
+			case MessageType.StunResponse:
+			case MessageType.StunResponseError:
+				break;
+			case MessageType.TURNBroadcast:
+				break;
+			case MessageType.TURNRegister:
+			case MessageType.TURNServer2ClientHeartbeat:
+			case MessageType.TURNClient2ServerHeartbeat:
+				break;
+			case MessageType.P2PHolePunchingRequest:
+			case MessageType.P2PHolePunchingResponse:
+			case MessageType.P2PHeartbeat:
+			default:
+				throw new ArgumentOutOfRangeException();
+		}
+	}
 }
