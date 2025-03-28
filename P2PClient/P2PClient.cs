@@ -85,6 +85,7 @@ public class P2PClient
 				Console.WriteLine("STUN响应为空, 无法注册到TURN服务器");
 				return;
 			}
+
 			//等待用户退出
 			Console.WriteLine("按任意键退出...");
 			Console.ReadKey();
@@ -139,7 +140,8 @@ public class P2PClient
 
 	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
-		Console.WriteLine($"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 接收端口: {_udpClient.Client.LocalEndPoint}");
+		Console.WriteLine(
+			$"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 接收端口: {_udpClient.Client.LocalEndPoint}");
 		var messageType = (MessageType)data[0];
 		Console.WriteLine($"消息类型: {messageType}");
 		switch (messageType)
@@ -342,15 +344,21 @@ public class P2PClient
 
 			#region 如果广播说我需要给他先抛橄榄枝,那我就先抛橄榄枝
 
-			var needPrepareAcceptIncomingConnectionForThisClient = broadcastMessage.IsNeedPrepareAcceptIncomingConnectionForThisClient;
+			var needPrepareAcceptIncomingConnectionForThisClient =
+				broadcastMessage.IsNeedPrepareAcceptIncomingConnectionForThisClient;
 			if (needPrepareAcceptIncomingConnectionForThisClient)
 			{
 				Console.WriteLine($"收到广播消息,需要我先抛橄榄枝给对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
-				var oliveBranchMessage = new P2PHeartbeatMessage(_clientId, "NORMAN P2P OLIVE BRANCH");
-				var oliveBranchBytes = oliveBranchMessage.ToBytes();
-				await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
-					broadcastMessage.ClientSideEndPointToTURN);
-				Console.WriteLine($"已发送橄榄枝消息到: {broadcastMessage.ClientSideEndPointToTURN}");
+				for (var i = 1; i <= 10; i++)
+				{
+					var oliveBranchMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P OLIVE BRANCH {i}");
+					var oliveBranchBytes = oliveBranchMessage.ToBytes();
+					await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
+						broadcastMessage.ClientSideEndPointToTURN);
+					Thread.Sleep(300);
+					Console.WriteLine($"已发送第{i}次橄榄枝消息到: {broadcastMessage.ClientSideEndPointToTURN}");
+				}
+
 				return;
 			}
 
@@ -363,7 +371,7 @@ public class P2PClient
 			if (needWaitForPrepareAcceptIncomingConnectionForThisClient)
 			{
 				Console.WriteLine($"收到广播消息,需要我等待对方抛橄榄枝: {broadcastMessage.ClientSideEndPointToTURN}");
-				await Task.Delay(200);
+				await Task.Delay(500);
 				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方: {broadcastMessage.ClientSideEndPointToTURN}");
 			}
 
@@ -444,8 +452,8 @@ public class P2PClient
 
 	private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
 	{
-		const int maxRetries = 2;
-		const int retryDelay = 1000;
+		const int maxRetries = 5;
+		const int retryDelay = 300;
 
 		for (var i = 0; i < maxRetries; i++)
 		{
@@ -454,14 +462,14 @@ public class P2PClient
 				var messageBytes = message.ToBytes();
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
 				Console.WriteLine($"P2P打洞消息已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
-				return;
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"发送失败 ({i + 1}/{maxRetries}): {ex.Message}");
-				if (i < maxRetries - 1)
-					await Task.Delay(retryDelay);
 			}
+
+			if (i < maxRetries - 1)
+				await Task.Delay(retryDelay);
 		}
 	}
 
