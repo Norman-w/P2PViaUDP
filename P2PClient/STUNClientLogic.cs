@@ -23,6 +23,8 @@ public class STUNClient
 	private P2PClientConfig _settings;
 	private UdpClient _udpClient;
 	private Guid _clientId = Guid.NewGuid();
+	private uint _isSymmetricNATTypeCheckingRequestRetriedTimes;
+	private const uint MaxIsSymmetricNATTypeCheckingRequestRetryTimes = 3;
 
 	public NATTypeEnum MyNATType;
 
@@ -37,26 +39,26 @@ public class STUNClient
 			var ip = await Dns.GetHostAddressesAsync(domain);
 			_settings.STUNMainServerIP = ip[0].ToString();
 		}
-
+		#endregion
+		
 		var serverEndPoint = new IPEndPoint(
 			IPAddress.Parse(_settings.STUNMainServerIP),
 			_settings.STUNMainAndSlaveServerPrimaryPort
 		);
 
-		#endregion
 
-		#region 构建STUN请求消息, 先发送是否对称型的检测包
+		await ConductWhichKindOfConeNATCheckAsync(serverEndPoint);
 
-		var isSymmetricNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
-			Guid.NewGuid(),
-			StunNATTypeCheckingRequest.SubCheckingTypeEnum.IsSymmetric,
-			_clientId,
-			serverEndPoint,
-			DateTime.Now
-		);
+		Console.ForegroundColor = ConsoleColor.Gray;
+		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
+		Console.ResetColor();
+		
+		await ConductSymmetricNATCheckAsync(serverEndPoint);
+	}
 
-		#endregion
-
+	private async Task ConductWhichKindOfConeNATCheckAsync(IPEndPoint serverEndPoint)
+	{
+		
 		#region 第一轮测试,先测试是什么锥形,只给主服务器的主端口发送一条消息,看看能从哪些路径回来.
 
 		var whichKindOfConeNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
@@ -70,7 +72,7 @@ public class STUNClient
 		//只需要发送给主服务器的主要端口.主服务器接收到消息以后会转发到从服务器,然后主服务器的两个端口尝试返回,从服务器的两个端口尝试返回.
 		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes,
 			whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
-		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(2000);
+		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(1000);
 		// var whichKindOfConeCheckingResult = NATTypeEnum.Unknown;
 		MyNATType = whichKindOfConeCheckingResult;
 
@@ -109,123 +111,153 @@ public class STUNClient
 		}
 
 		#endregion
+	}
 
-		Console.ForegroundColor = ConsoleColor.Gray;
-		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
-		Console.ResetColor();
-
-
-		#region 进行是否是对称型NAT的一轮测试
-
-		//先清空上一轮所有的已经检测到的我的公网IP和端口记录,进行下面的测试
-		MyEndPointFromMainStunMainPortReply = null;
-		_myEndPointFromMainStunSecondaryPortReply = null;
-		_myEndPointFromSlaveStunMainPortReply = null;
-		_myEndPointFromSlaveStunSecondaryPortReply = null;
-
-		var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
-
-		// 创建消息队列用于存储接收到的消息
-		var responseQueue = new Queue<StunNATTypeCheckingResponse>();
-		var receivedCount = 0;
-
-		// 创建取消令牌，设置较长的超时时间
-		var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-
-		// 先启动接收任务
-		var receiveTask = Task.Run(async () =>
+	private async Task ConductSymmetricNATCheckAsync(IPEndPoint serverEndPoint)
+	{
+		_isSymmetricNATTypeCheckingRequestRetriedTimes = 0;
+		while (true)
 		{
-			try
+			_isSymmetricNATTypeCheckingRequestRetriedTimes++;
+			if (_isSymmetricNATTypeCheckingRequestRetriedTimes > MaxIsSymmetricNATTypeCheckingRequestRetryTimes)
 			{
-				while (!cts.Token.IsCancellationRequested)
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine($"🛡🛡🛡对称型NAT检测已经重试了{MaxIsSymmetricNATTypeCheckingRequestRetryTimes}次,无法确定NAT类型,请检查网络环境🛡🛡🛡");
+				Console.ResetColor();
+				return;
+			}
+
+			#region 构建STUN请求消息, 先发送是否对称型的检测包
+
+			var isSymmetricNATTypeCheckingRequest = new StunNATTypeCheckingRequest(Guid.NewGuid(), StunNATTypeCheckingRequest.SubCheckingTypeEnum.IsSymmetric, _clientId, serverEndPoint, DateTime.Now);
+
+			#endregion
+
+			#region 进行是否是对称型NAT的一轮测试
+
+			//先清空上一轮所有的已经检测到的我的公网IP和端口记录,进行下面的测试
+			MyEndPointFromMainStunMainPortReply = null;
+			_myEndPointFromMainStunSecondaryPortReply = null;
+			_myEndPointFromSlaveStunMainPortReply = null;
+			_myEndPointFromSlaveStunSecondaryPortReply = null;
+
+			var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
+
+			// 创建消息队列用于存储接收到的消息
+			var responseQueue = new Queue<StunNATTypeCheckingResponse>();
+			var receivedCount = 0;
+
+			// 创建取消令牌，设置较长的超时时间
+			var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+			// 先启动接收任务
+			var receiveTask = Task.Run(async () =>
+			{
+				try
 				{
-					try
+					while (!cts.Token.IsCancellationRequested)
 					{
-						Console.WriteLine("等待接收STUN响应...");
-						// 使用带超时的接收
-						var result = await _udpClient.ReceiveAsync(cts.Token);
-						var messageBytes = result.Buffer;
-						var messageType = (MessageType)messageBytes[0];
-						
-						if (messageType == MessageType.StunNATTypeCheckingResponse)
+						try
 						{
-							var response = StunNATTypeCheckingResponse.FromBytes(messageBytes);
-							Console.WriteLine(
-								$"收到STUN响应: {result.RemoteEndPoint}, 报告的外网信息: {response.DetectedClientNATEndPoint}");
-							
-							// 处理响应
-							ProcessIsSymmetricStunNATTypeCheckingResponse(response);
-							responseQueue.Enqueue(response);
-							receivedCount++;
-							
-							// 如果收到了4个响应，则提前完成
-							if (receivedCount >= 4)
+							Console.WriteLine("等待接收STUN响应...");
+							// 使用带超时的接收
+							var result = await _udpClient.ReceiveAsync(cts.Token);
+							var messageBytes = result.Buffer;
+							var messageType = (MessageType)messageBytes[0];
+
+							if (messageType == MessageType.StunNATTypeCheckingResponse)
 							{
-								Console.WriteLine("已收到所有预期的响应，提前结束接收");
-								break;
+								var response = StunNATTypeCheckingResponse.FromBytes(messageBytes);
+								Console.WriteLine($"收到STUN响应: {result.RemoteEndPoint}, 报告的外网信息: {response.DetectedClientNATEndPoint}");
+
+								// 处理响应
+								ProcessIsSymmetricStunNATTypeCheckingResponse(response);
+								responseQueue.Enqueue(response);
+								receivedCount++;
+
+								// 如果收到了4个响应，则提前完成
+								if (receivedCount >= 4)
+								{
+									Console.WriteLine("已收到所有预期的响应，提前结束接收");
+									break;
+								}
+							}
+							else
+							{
+								Console.WriteLine($"收到未知消息类型: {messageType}");
 							}
 						}
-					}
-					catch (OperationCanceledException oce)
-					{
-						Console.WriteLine($"接收操作被取消,原因: {oce.Message}");
-						break;
-					}
-					catch (Exception ex)
-					{
-						Console.WriteLine($"接收响应时发生错误: {ex.Message}");
+						catch (OperationCanceledException oce)
+						{
+							Console.WriteLine($"接收操作被取消,原因: {oce.Message}");
+							break;
+						}
+						catch (Exception ex)
+						{
+							Console.WriteLine($"接收响应时发生错误: {ex.Message}");
+						}
 					}
 				}
-			}
-			catch (Exception ex)
+				catch (Exception ex)
+				{
+					Console.WriteLine($"接收任务发生错误: {ex}");
+				}
+			}, cts.Token);
+
+			// 等待接收任务启动
+			// await Task.Delay(500, cts.Token);
+
+			// 发送请求
+			Console.WriteLine("开始向所有STUN服务器端口发送请求...");
+			await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
+
+			// 等待接收任务完成或超时
+			try
 			{
-				Console.WriteLine($"接收任务发生错误: {ex}");
+				// 增加等待时间，确保有足够时间接收所有响应
+				await Task.WhenAny(receiveTask, Task.Delay(5000, cts.Token));
+				// 如果没有收到足够的响应，可能需要重试
+				if (receivedCount < 2)
+				{
+					Console.WriteLine("接收响应不足，进行重试...");
+					await Task.Delay(1000, cts.Token);
+					await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
+					// 额外等待响应
+					await Task.Delay(3000, cts.Token);
+				}
 			}
-		}, cts.Token);
-
-		// 等待接收任务启动
-		await Task.Delay(500, cts.Token);
-
-		// 发送请求
-		Console.WriteLine("开始向所有STUN服务器端口发送请求...");
-		await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
-
-		// 等待接收任务完成或超时
-		try
-		{
-			// 增加等待时间，确保有足够时间接收所有响应
-			await Task.WhenAny(receiveTask, Task.Delay(5000, cts.Token));
-			// 如果没有收到足够的响应，可能需要重试
-			if (receivedCount < 2)
+			catch (OperationCanceledException)
 			{
-				Console.WriteLine("接收响应不足，进行重试...");
-				await Task.Delay(1000, cts.Token);
-				await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
-				// 额外等待响应
-				await Task.Delay(3000, cts.Token);
+				Console.WriteLine("等待接收响应超时");
 			}
-		}
-		catch (OperationCanceledException)
-		{
-			Console.WriteLine("等待接收响应超时");
-		}
 
-		// 确保接收任务已完成
-		if (!cts.IsCancellationRequested)
-		{
-			Console.WriteLine("是否全锥形NAT检测 的取消令牌已关闭");
-			cts.Cancel();
+			// 确保接收任务已完成
+			if (!cts.IsCancellationRequested)
+			{
+				Console.WriteLine("是否全锥形NAT检测 的取消令牌已关闭");
+				cts.Cancel();
+			}
+
+			// 检查结果
+			Console.WriteLine($"最终收到 {receivedCount} 个响应，继续分析NAT类型...");
+
+			#endregion
+
+			MyNATType = AnalyzeIsSymmetricCheckingResponses(responseQueue.ToList(), out var needRetry);
+			Console.ForegroundColor = MyNATType == NATTypeEnum.Symmetric ? ConsoleColor.DarkRed : ConsoleColor.DarkYellow;
+			var natTypeString = MyNATType == NATTypeEnum.Symmetric ? "🛡🛡🛡对称型🛡🛡🛡" : "🤯🤯🤯端口受限型🤯🤯🤯";
+			Console.WriteLine($"**************************[是否对称型NAT]检测完成,最终确定NAT类型为: {natTypeString}**************************");
+			Console.ResetColor();
+
+			if (needRetry)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkYellow;
+				Console.WriteLine($"执行是否对称型NAT检测的第{_isSymmetricNATTypeCheckingRequestRetriedTimes}次重试,仍然无法确定NAT类型,继续重试...");
+				Console.ResetColor();
+				continue;
+			}
+			break;
 		}
-
-		// 检查结果
-		Console.WriteLine($"最终收到 {receivedCount} 个响应，继续分析NAT类型...");
-
-		#endregion
-		MyNATType = AnalyzeIsSymmetricCheckingResponses(responseQueue.ToList());
-		Console.ForegroundColor = MyNATType == NATTypeEnum.Symmetric ? ConsoleColor.DarkRed : ConsoleColor.DarkYellow;
-		var natTypeString = MyNATType == NATTypeEnum.Symmetric ? "🛡🛡🛡对称型🛡🛡🛡" : "🤯🤯🤯端口受限型🤯🤯🤯";
-		Console.WriteLine($"**************************[是否对称型NAT]检测完成,最终确定NAT类型为: {natTypeString}**************************");
-		Console.ResetColor();
 	}
 
 	private async Task<NATTypeEnum> ReceiveWhichKindOfConeCheckingRequestStunResponses(int timeoutMs)
@@ -407,7 +439,7 @@ public class STUNClient
 		}
 	}
 
-	private NATTypeEnum AnalyzeIsSymmetricCheckingResponses(List<StunNATTypeCheckingResponse> responses)
+	private NATTypeEnum AnalyzeIsSymmetricCheckingResponses(List<StunNATTypeCheckingResponse> responses, out bool needRetry)
 	{
 		if (responses.Count != 4)
 		{
@@ -435,6 +467,7 @@ public class STUNClient
 
 			#endregion
 
+			needRetry = true;
 			return NATTypeEnum.Unknown;
 		}
 		else
@@ -444,24 +477,28 @@ public class STUNClient
 			if (MyEndPointFromMainStunMainPortReply == null)
 			{
 				Console.WriteLine("没有收到主STUN服务器主端口的响应,无法确定NAT类型");
+				needRetry = true;
 				return NATTypeEnum.Unknown;
 			}
 
 			if (_myEndPointFromMainStunSecondaryPortReply == null)
 			{
 				Console.WriteLine("没有收到主STUN服务器次要端口的响应,无法确定NAT类型");
+				needRetry = true;
 				return NATTypeEnum.Unknown;
 			}
 
 			if (_myEndPointFromSlaveStunMainPortReply == null)
 			{
 				Console.WriteLine("没有收到从STUN服务器主端口的响应,无法确定NAT类型");
+				needRetry = true;
 				return NATTypeEnum.Unknown;
 			}
 
 			if (_myEndPointFromSlaveStunSecondaryPortReply == null)
 			{
 				Console.WriteLine("没有收到从STUN服务器次要端口的响应,无法确定NAT类型");
+				needRetry = true;
 				return NATTypeEnum.Unknown;
 			}
 
@@ -499,7 +536,10 @@ public class STUNClient
 
 			if (outgoingIpList.Count > 1)
 			{
-				Console.WriteLine("从多个IP出去,无法确定NAT类型");
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine("从多个IP出去,无法确定NAT类型,可能是双线宽带之类的情况,这种就不要再尝试重连了");
+				Console.ResetColor();
+				needRetry = false;
 				return NATTypeEnum.Unknown;
 			}
 
@@ -512,16 +552,34 @@ public class STUNClient
 				Console.ForegroundColor = ConsoleColor.Yellow;
 				Console.WriteLine("太遗憾了,你出网到4个不同的端点时,使用了不同的外网地址,你是对称型NAT,打洞成功率会低很多哦.不过不要灰心!");
 				Console.ResetColor();
+				needRetry = false;
 				return NATTypeEnum.Symmetric;
 			}
 
 			#endregion
 
-			Console.ForegroundColor = ConsoleColor.Green;
-			Console.WriteLine("虽然经过第一轮测试,无法确定NAT类型,需要进入下一轮测试,但是恭喜,这样的打洞成功率会高一些哦");
-			Console.ResetColor();
+			#region 如果出去不是1个ip+端口也不是4个,那就可能是网络不稳定需要重新测试一次
+			
+			if (portsToMainServer.Count + portsToSlaveServer.Count != 4)
+			{
+				Console.ForegroundColor = ConsoleColor.Magenta;
+				var endPointsString = string.Join(Environment.NewLine, responses
+					.Select(
+						r=>
+						$"从{(r.IsFromMainSTUNServer ? "主" : "从")}STUN服务器的{r.StunServerEndPoint.Port}端口到{r.DetectedClientNATEndPoint}"
+					));
+				Console.WriteLine($"出网端口不是4个(对称型),也不是1个(某种锥形),而是 {portsToMainServer.Count + portsToSlaveServer.Count} 个,可能是网络不稳定,需要重新测试一次,出网端口:{Environment.NewLine} {endPointsString}");
+				Console.ResetColor();
+				needRetry = true;
+				return NATTypeEnum.Unknown;
+			}
 
-			//需要进入下一轮测试了,让消息从主服务器的主端口出去,然后看回来的路径.
+			#endregion
+
+			Console.ForegroundColor = ConsoleColor.DarkRed;
+			Console.WriteLine($"其他未知的代码没有处理的情况,需要完善逻辑");
+			Console.ResetColor();
+			needRetry = false;
 			return NATTypeEnum.Unknown;
 		}
 	}
