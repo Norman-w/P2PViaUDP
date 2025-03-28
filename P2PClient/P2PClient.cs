@@ -113,6 +113,10 @@ public class P2PClient
 			try
 			{
 				var result = await _udpClient.ReceiveAsync();
+				var messageType = (MessageType)result.Buffer[0];
+				Console.ForegroundColor = ConsoleColor.Cyan;
+				Console.WriteLine($"从: {result.RemoteEndPoint} 收到消息, 消息类型: {messageType}");
+				Console.ResetColor();
 				_ = Task.Run(() => ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint));
 			}
 			catch (Exception ex)

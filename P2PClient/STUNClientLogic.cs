@@ -58,6 +58,10 @@ public class STUNClient
 
 
 		await ConductWhichKindOfConeNATCheckAsync(serverEndPoint);
+		if (MyNATType == NATTypeEnum.FullCone)
+		{
+			return;
+		}
 		
 		_wholeProcessStatus = WholeProcessStatusEnum.等待是否为对称型NAT测试结果中;
 
