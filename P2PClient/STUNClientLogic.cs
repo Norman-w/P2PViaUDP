@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.STUN;
 using TURNServer;
@@ -72,7 +73,9 @@ public class STUNClient
 		//只需要发送给主服务器的主要端口.主服务器接收到消息以后会转发到从服务器,然后主服务器的两个端口尝试返回,从服务器的两个端口尝试返回.
 		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes,
 			whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
+		// return;
 		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(1000);
+		// var whichKindOfConeCheckingResult = NATTypeEnum.PortRestrictedCone;//Remove this fake result
 		// var whichKindOfConeCheckingResult = NATTypeEnum.Unknown;
 		MyNATType = whichKindOfConeCheckingResult;
 
@@ -544,10 +547,50 @@ public class STUNClient
 			}
 
 			#endregion
+			
+			var allPorts = portsToMainServer.Concat(portsToSlaveServer).Distinct().ToList();
+
+			#region 如果只有1个,因为之前已经检查完了是什么类型的锥形,认为可能是端口受限型的才到这里的,而出网只有一个的话,那就是端口首先行不是对称型了.
+
+			if (allPorts.Count == 1)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkYellow;
+				Console.WriteLine("出网端口只有1个,不是对称型NAT,由于之前已经检查完了是什么类型的锥形,认为可能是端口受限型的");
+				Console.ResetColor();
+				needRetry = false;
+				return NATTypeEnum.PortRestrictedCone;
+			}
+
+			#endregion
+
+			#region 如果是2个,发送到主服务器的次要端口,从服务器的主端口和次要端口的三个出网NAT端口都一致的话,也可以确定不是对称型的
+
+			//原因是我们第一轮测试中会向主服务器的主要端口已经发过一条消息(主服务器大喇叭到从服务器和自己的一共4个端口返回那次),所以已经算是建立起来连接了,就会复用之前的端口
+			//而且因为发送完了以后进入到ReceiveAsync状态以后,NAT设备(或者本机)认为这个会话就结束了,所以再使用_udpClient换目的地端口出去的消息,客户端NAT公网端口也有了变化
+			//udpClient->主3478 1发4回消息 建立公网11111
+			//udpClient->主3478,主3479,从3478,从3479 4发4回消息, 第一条复用了11111(NAT复用机制),第2~4条会有新的公网端口(之前进入到ReceiveAsync以为是断开了要创建新映射)
+			if (_myEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunMainPortReply.Port
+			    && _myEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunSecondaryPortReply.Port)
+			{
+				Console.ForegroundColor = ConsoleColor.DarkYellow;
+				var sb = new StringBuilder();
+				sb.AppendLine("出网端口只有2个,不是对称型NAT,因为发送到主服务器的次要端口,从服务器的主端口和次要端口的三个出网NAT端口都一致的,确定为端口受限型的");
+				sb.AppendLine($"曾会话过的主服务器的主端口:{MyEndPointFromMainStunMainPortReply},");
+				sb.AppendLine($"主服务器的次要端口:{_myEndPointFromMainStunSecondaryPortReply},");
+				sb.AppendLine($"从服务器的主端口:{_myEndPointFromSlaveStunMainPortReply},");
+				sb.AppendLine($"从服务器的次要端口:{_myEndPointFromSlaveStunSecondaryPortReply}");
+				Console.WriteLine(sb.ToString());
+				Console.ResetColor();
+				needRetry = false;
+				return NATTypeEnum.PortRestrictedCone;
+			}
+
+			#endregion
 
 			#region 如果出网端口是从4个出去的就是对称型NAT
+			
 
-			if (portsToMainServer.Count + portsToSlaveServer.Count == 4)
+			if (allPorts.Count == 4)
 			{
 				Console.ForegroundColor = ConsoleColor.Yellow;
 				Console.WriteLine("太遗憾了,你出网到4个不同的端点时,使用了不同的外网地址,你是对称型NAT,打洞成功率会低很多哦.不过不要灰心!");
@@ -560,7 +603,7 @@ public class STUNClient
 
 			#region 如果出去不是1个ip+端口也不是4个,那就可能是网络不稳定需要重新测试一次
 			
-			if (portsToMainServer.Count + portsToSlaveServer.Count != 4)
+			if (allPorts.Count != 4)
 			{
 				Console.ForegroundColor = ConsoleColor.Magenta;
 				var endPointsString = string.Join(Environment.NewLine, responses
@@ -568,7 +611,7 @@ public class STUNClient
 						r=>
 						$"从{(r.IsFromMainSTUNServer ? "主" : "从")}STUN服务器的{r.StunServerEndPoint.Port}端口到{r.DetectedClientNATEndPoint}"
 					));
-				Console.WriteLine($"出网端口不是4个(对称型),也不是1个(某种锥形),而是 {portsToMainServer.Count + portsToSlaveServer.Count} 个,可能是网络不稳定,需要重新测试一次,出网端口:{Environment.NewLine} {endPointsString}");
+				Console.WriteLine($"出网端口不是4个(对称型),也不是1或2个(某种锥形),而是 {allPorts.Count} 个,可能是网络不稳定,需要重新测试一次,出网端口:{Environment.NewLine} {endPointsString}");
 				Console.ResetColor();
 				needRetry = true;
 				return NATTypeEnum.Unknown;
