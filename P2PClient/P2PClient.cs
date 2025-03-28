@@ -30,10 +30,7 @@ public class P2PClient
 	private readonly UdpClient _udpClient = new();
 	private readonly P2PClientConfig _settings = P2PClientConfig.Default;
 
-	/// <summary>
-	/// 从主STUN服务器的主端口响应中获取到的我的公网IP和端口
-	/// </summary>
-	private IPEndPoint? _myEndPointFromMainStunMainPortReply;
+	private IPEndPoint? _myEndPointFromMainStunSecondPortReply;
 
 	private NATTypeEnum _myNATType = NATTypeEnum.Unknown;
 	private readonly Guid _clientId = Guid.NewGuid();
@@ -75,12 +72,13 @@ public class P2PClient
 			// STUN 阶段
 			_stunClient = new STUNClient(_settings, _udpClient);
 			await _stunClient.RequestStunServerAsync();
-			_myEndPointFromMainStunMainPortReply = _stunClient.MyEndPointFromMainStunMainPortReply;
 			_myNATType = _stunClient.MyNATType;
+			//TODO 使用第二个口的信息,因为第一个口的信息总是和第二个的不一样
+			_myEndPointFromMainStunSecondPortReply = _stunClient.MyEndPointFromMainStunSecondaryPortReply;
 
 			// TURN 阶段
-			if (_myEndPointFromMainStunMainPortReply != null)
-				await TURNClientLogic.RegisterToTurnServerAsync(_settings, _myEndPointFromMainStunMainPortReply,
+			if (_myEndPointFromMainStunSecondPortReply != null)
+				await TURNClientLogic.RegisterToTurnServerAsync(_settings, _myEndPointFromMainStunSecondPortReply,
 					_clientId, _myNATType, _udpClient);
 			else
 			{
@@ -283,7 +281,7 @@ public class P2PClient
 
 			#endregion
 
-			if (_myEndPointFromMainStunMainPortReply == null)
+			if (_myEndPointFromMainStunSecondPortReply == null)
 			{
 				throw new Exception("STUN响应为空, 无法处理P2P打洞消息");
 			}
@@ -326,11 +324,6 @@ public class P2PClient
 
 	private async Task ProcessBroadcastMessageAsync(byte[] data)
 	{
-		if (_myEndPointFromMainStunMainPortReply == null)
-		{
-			throw new Exception("STUN响应为空, 无法处理广播消息");
-		}
-
 		try
 		{
 			// 从字节数组中解析广播消息
@@ -374,7 +367,7 @@ public class P2PClient
 
 			var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
 			{
-				SourceEndPoint = _myEndPointFromMainStunMainPortReply,
+				SourceEndPoint = _myEndPointFromMainStunSecondPortReply,
 				DestinationEndPoint = broadcastMessage.ClientSideEndPointToTURN,
 				DestinationClientId = broadcastMessage.Guid,
 				SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
@@ -447,11 +440,6 @@ public class P2PClient
 
 	private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
 	{
-		if (_myEndPointFromMainStunMainPortReply == null)
-		{
-			throw new Exception("STUN响应为空, 无法发送P2P打洞消息");
-		}
-
 		const int maxRetries = 2;
 		const int retryDelay = 1000;
 

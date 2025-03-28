@@ -12,7 +12,7 @@ public static class TURNClientLogic
 
 	#region 注册到TURN服务器
 
-	public static async Task RegisterToTurnServerAsync(P2PClientConfig settings, IPEndPoint myEndPointFromMainStunMainPortReply, Guid clientId, NATTypeEnum myNATType, UdpClient udpClient)
+	public static async Task RegisterToTurnServerAsync(P2PClientConfig settings, IPEndPoint myEndPointFromMainStunSecondaryPortReply, Guid clientId, NATTypeEnum myNATType, UdpClient udpClient)
 	{
 		try
 		{
@@ -24,14 +24,14 @@ public static class TURNClientLogic
 				settings.TURNServerIP = ip[0].ToString();
 			}
 
-			if (myEndPointFromMainStunMainPortReply == null)
+			if (myEndPointFromMainStunSecondaryPortReply == null)
 			{
 				throw new Exception("STUN响应为空");
 			}
 
 			var registerMessage = new TURNRegisterMessage
 			{
-				EndPoint = myEndPointFromMainStunMainPortReply,
+				EndPoint = myEndPointFromMainStunSecondaryPortReply,
 				Guid = clientId,
 				GroupGuid = Guid.Parse("00000000-0000-0000-0000-000000000001"),
 				DetectedNATType = myNATType
@@ -43,7 +43,7 @@ public static class TURNClientLogic
 			);
 
 			Console.WriteLine($"正在向TURN服务器注册: {turnServerEndPoint}");
-			Console.WriteLine($"本地终端点: {myEndPointFromMainStunMainPortReply}");
+			Console.WriteLine($"本地终端点: {myEndPointFromMainStunSecondaryPortReply}");
 
 			var registerBytes = registerMessage.ToBytes();
 			Console.WriteLine($"发送数据大小: {registerBytes.Length}");

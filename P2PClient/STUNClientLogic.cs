@@ -16,8 +16,8 @@ public class STUNClient
 	}
 	#region 私有字段
 
-	public IPEndPoint? MyEndPointFromMainStunMainPortReply;
-	private IPEndPoint? _myEndPointFromMainStunSecondaryPortReply;
+	private IPEndPoint? _myEndPointFromMainStunMainPortReply;
+	public IPEndPoint? MyEndPointFromMainStunSecondaryPortReply;
 	private IPEndPoint? _myEndPointFromSlaveStunMainPortReply;
 	private IPEndPoint? _myEndPointFromSlaveStunSecondaryPortReply;
 
@@ -151,8 +151,8 @@ public class STUNClient
 			#region 进行是否是对称型NAT的一轮测试
 
 			//先清空上一轮所有的已经检测到的我的公网IP和端口记录,进行下面的测试
-			MyEndPointFromMainStunMainPortReply = null;
-			_myEndPointFromMainStunSecondaryPortReply = null;
+			_myEndPointFromMainStunMainPortReply = null;
+			MyEndPointFromMainStunSecondaryPortReply = null;
 			_myEndPointFromSlaveStunMainPortReply = null;
 			_myEndPointFromSlaveStunSecondaryPortReply = null;
 
@@ -289,12 +289,12 @@ public class STUNClient
 		{
 			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
-				MyEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
+				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
 
 			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
 			{
-				_myEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
+				MyEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
 		}
 		else if (response.IsFromSlaveSTUNServer)
@@ -322,11 +322,11 @@ public class STUNClient
 		{
 			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
 			{
-				MyEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
+				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
 			else if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
 			{
-				_myEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
+				MyEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
 		}
 		else if (response.IsFromSlaveSTUNServer)
@@ -382,14 +382,14 @@ public class STUNClient
 		{
 			#region 缺一不可
 
-			if (MyEndPointFromMainStunMainPortReply == null)
+			if (_myEndPointFromMainStunMainPortReply == null)
 			{
 				Console.WriteLine("没有收到主STUN服务器主端口的响应,无法确定NAT类型");
 				needRetry = true;
 				return NATTypeEnum.Unknown;
 			}
 
-			if (_myEndPointFromMainStunSecondaryPortReply == null)
+			if (MyEndPointFromMainStunSecondaryPortReply == null)
 			{
 				Console.WriteLine("没有收到主STUN服务器次要端口的响应,无法确定NAT类型");
 				needRetry = true;
@@ -474,14 +474,14 @@ public class STUNClient
 			//而且因为发送完了以后进入到ReceiveAsync状态以后,NAT设备(或者本机)认为这个会话就结束了,所以再使用_udpClient换目的地端口出去的消息,客户端NAT公网端口也有了变化
 			//udpClient->主3478 1发4回消息 建立公网11111
 			//udpClient->主3478,主3479,从3478,从3479 4发4回消息, 第一条复用了11111(NAT复用机制),第2~4条会有新的公网端口(之前进入到ReceiveAsync以为是断开了要创建新映射)
-			if (_myEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunMainPortReply.Port
-			    && _myEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunSecondaryPortReply.Port)
+			if (MyEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunMainPortReply.Port
+			    && MyEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunSecondaryPortReply.Port)
 			{
 				Console.ForegroundColor = ConsoleColor.DarkYellow;
 				var sb = new StringBuilder();
 				sb.AppendLine("出网端口只有2个,不是对称型NAT,因为发送到主服务器的次要端口,从服务器的主端口和次要端口的三个出网NAT端口都一致的,确定为端口受限型的");
-				sb.AppendLine($"曾会话过的主服务器的主端口:{MyEndPointFromMainStunMainPortReply},");
-				sb.AppendLine($"主服务器的次要端口:{_myEndPointFromMainStunSecondaryPortReply},");
+				sb.AppendLine($"曾会话过的主服务器的主端口:{_myEndPointFromMainStunMainPortReply},");
+				sb.AppendLine($"主服务器的次要端口:{MyEndPointFromMainStunSecondaryPortReply},");
 				sb.AppendLine($"从服务器的主端口:{_myEndPointFromSlaveStunMainPortReply},");
 				sb.AppendLine($"从服务器的次要端口:{_myEndPointFromSlaveStunSecondaryPortReply}");
 				Console.WriteLine(sb.ToString());
