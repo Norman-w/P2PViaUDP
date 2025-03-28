@@ -127,7 +127,7 @@ public class P2PClient
 
 	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
-		Console.WriteLine($"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 内容: {BitConverter.ToString(data)}");
+		Console.WriteLine($"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 接收端口: {_udpClient.Client.LocalEndPoint}");
 		var messageType = (MessageType)data[0];
 		Console.WriteLine($"消息类型: {messageType}");
 		switch (messageType)
@@ -228,6 +228,16 @@ public class P2PClient
 			{
 				peer.EndPoint = holePunchingMessageFromOtherClient.SourceEndPoint;
 			}
+
+			#region 如果他是对称型的,他过来的时候不一定是什么端口,他自己也不知道,我得告诉他
+
+			if (holePunchingMessageFromOtherClient.SourceNatType == NATTypeEnum.Symmetric)
+			{
+				Console.WriteLine($"打洞请求的来源是对称型NAT,需要告诉他他自己是什么端口: {receiverRemoteEndPoint}");
+				if (peer != null) peer.EndPoint = receiverRemoteEndPoint;
+			}
+
+			#endregion
 
 			#region 给他发送P2P打洞响应消息
 

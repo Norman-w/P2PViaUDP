@@ -450,7 +450,7 @@ public class TurnServer
 		if (portRestrictedConePair != null && symmetricPair != null)
 		{
 			// 端口受限 <-> 对称形
-			isBothNeedPassiveDoHolePunching = false;
+			isBothNeedPassiveDoHolePunching = true;
 			active = symmetricPair;
 			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
