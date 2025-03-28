@@ -309,7 +309,7 @@ public class TurnServer
 				restrictedConePair = laterPair;
 				break;
 			case NATTypeEnum.PortRestrictedCone:
-				restrictedConePair = laterPair;
+				portRestrictedConePair = laterPair;
 				break;
 			case NATTypeEnum.Symmetric:
 				symmetricPair = laterPair;
