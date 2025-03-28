@@ -85,7 +85,7 @@ public class STUNClient
 		await _udpClient.SendAsync(whichKindOfConeNATTypeCheckingRequestBytes,
 			whichKindOfConeNATTypeCheckingRequestBytes.Length, serverEndPoint);
 		// return;
-		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(100);
+		var whichKindOfConeCheckingResult = await ReceiveWhichKindOfConeCheckingRequestStunResponses(2000);
 		// var whichKindOfConeCheckingResult = NATTypeEnum.PortRestrictedCone;//Remove this fake result
 		// var whichKindOfConeCheckingResult = NATTypeEnum.Unknown;
 		MyNATType = whichKindOfConeCheckingResult;

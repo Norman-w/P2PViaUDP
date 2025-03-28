@@ -106,20 +106,24 @@ public class TurnServer
 		{
 			try
 			{
-				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient, true))
+				if (!DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
+					    existInGroupEarlierClient,
+					    thisNewClient,
+					    out var active,
+					    out _,
+					    out var errorMessage))
 				{
-					Console.WriteLine($"不需要继续发送广播消息让客户端触发打洞,跳过向 {existInGroupEarlierClient.Guid} 发送广播,因为这个客户端的类型是 {existInGroupEarlierClient.NATType}");
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.WriteLine(errorMessage);
+					Console.ResetColor();
 					continue;
 				}
-				var isNeedPrepareAcceptIncomingConnectionForThisClient = existInGroupEarlierClient.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone;
-				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = !isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
-					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					ClientSideEndPointToTURN = thisNewClient.EndPointFromTURN,
 					Guid = thisNewClient.Guid,
-					IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
-					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
+					IsNeedPrepareAcceptIncomingConnectionForThisClient = active == existInGroupEarlierClient,
+					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = active != existInGroupEarlierClient,
 					GroupGuid = newClient.GroupGuid,
 					IsNeedHolePunchingToThisClient = true,
 					IsFullConeDetected = thisNewClient.NATType == NATTypeEnum.FullCone
@@ -139,15 +143,23 @@ public class TurnServer
 		{
 			try
 			{
-				if(!NeedContinueSendHolePunchingMessage(existInGroupEarlierClient, thisNewClient, false))
+				if (!DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
+					    existInGroupEarlierClient,
+					    thisNewClient,
+					    out var active,
+					    out _,
+					    out var errorMessage))
 				{
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.WriteLine(errorMessage);
+					Console.ResetColor();
 					continue;
 				}
-				var isNeedPrepareAcceptIncomingConnectionForThisClient = thisNewClient.NATType is NATTypeEnum.RestrictedCone or NATTypeEnum.PortRestrictedCone;
+				
+				var isNeedPrepareAcceptIncomingConnectionForThisClient = active == thisNewClient;
 				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = !isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
-					//TODO 这里只是测试,实际上应该发送消息的时候,先决定了让对方客户端用哪个端口再发送,现在只测试全锥的情况
 					ClientSideEndPointToTURN = existInGroupEarlierClient.EndPointFromTURN,
 					Guid = existInGroupEarlierClient.Guid,
 					IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
@@ -168,142 +180,21 @@ public class TurnServer
 	}
 
 	/// <summary>
-	/// 检查是否需要继续发送广播消息让客户端触发打洞.
-	/// 如果是正在发送广播给早期加入的客户端,且主动方应该是后面加入这个,则不用继续发送广播,返回false
-	/// </summary>
-	/// <param name="earlierPair"></param>
-	/// <param name="laterPair"></param>
-	/// <param name="isSendingToEarlierPair"></param>
-	/// <returns></returns>
-	private static bool NeedContinueSendHolePunchingMessage(TURNClient earlierPair, TURNClient laterPair,
-		bool isSendingToEarlierPair)
-	{
-		var decideResult = DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
-			earlierPair,
-			laterPair,
-			out var isBothNeedPassiveDoHolePunching,
-			out var active,
-			out var passive,
-			out var errorMessage);
-
-		#region 输出决定后的结果
-
-		if (!decideResult)
-		{
-			Console.WriteLine($"决定打洞的主动和被动时出错: {errorMessage}");
-			return false;
-		}
-		else if (isBothNeedPassiveDoHolePunching)
-		{
-			Console.WriteLine($"两个都需要主动发起打洞,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
-		}
-		else if (active is null || passive is null)
-		{
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine(
-				$"决策好像失败了,bug?主动和被动客户端有一个为null不能打洞 ,先后加入的两个客户端类型分别是 {earlierPair.NATType} 和 {laterPair.NATType}");
-			Console.ResetColor();
-			return false;
-		}
-		else if (active.Guid == laterPair.Guid)
-		{
-			Console.ForegroundColor = ConsoleColor.Cyan;
-			Console.WriteLine($"新加入的客户端是主动客户端,类型是 {laterPair.NATType}");
-			Console.ResetColor();
-		}
-		else if (passive.Guid == laterPair.Guid)
-		{
-			Console.ForegroundColor = ConsoleColor.Magenta;
-			Console.WriteLine($"新加入的客户端是被动客户端,类型是 {laterPair.NATType}");
-			Console.ResetColor();
-		}
-		else
-		{
-			Console.ForegroundColor = ConsoleColor.Yellow;
-			Console.WriteLine($"主动客户端是 {active.Guid}, 被动客户端是 {passive.Guid}");
-			Console.ResetColor();
-		}
-
-		#endregion
-
-		// if (isSendingToEarlierPair)
-		// {
-		// 	return active!.Guid == earlierPair.Guid;
-		// }
-		// else
-		// {
-		// 	return active!.Guid == laterPair.Guid;
-		// }
-		//TODO 确认一下这里这样写对不对
-		return true;
-	}
-
-	/// <summary>
 	/// 决定在打洞的时候哪个是被动的,哪个是主动的
-	/// 如果isBothNeedPassiveDoHolePunching返回的是true,则两个都要同时主动发起打洞,passive和active都是null
-	/// 否则,passive是被动的,active是主动的
+	/// 主动就是说"来搞我啊"的那一端,被动就是"好嘞"的那一端
 	/// </summary>
 	/// <param name="earlierPair">早些存在于组内的客户端</param>
 	/// <param name="laterPair">后加入的客户端</param>
-	/// <param name="isBothNeedPassiveDoHolePunching">是否两个都需要主动发起打洞</param>
-	/// <param name="active">主动的客户端</param>
-	/// <param name="passive">被动的客户端</param>
+	/// <param name="active">主动的客户端(先出手的)</param>
+	/// <param name="passive">被动的客户端(后出手的)</param>
 	/// <param name="errorMessage">当出现错误时的错误信息</param>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
 	/// <returns>是否出现错误</returns>
 	private static bool DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 		TURNClient earlierPair, TURNClient laterPair,
-		out bool isBothNeedPassiveDoHolePunching,
 		out TURNClient? active, out TURNClient? passive,
 		out string errorMessage)
 	{
-		/*
-		 //TODO 该说明已经不准确,等待更新.下面的代码是正确的.
-	 打洞顺序说明:
-	 当两端是
-	 全锥形 <-> IP受限/端口受限/对称形
-		全锥形作为"服务器",另一端作为"客户端",主动连接消息由"客户端"发起
-	 全锥形 <-> 全锥形
-		后加入的一端作为"服务器",另一端作为"客户端",主动连接消息由"客户端"发起, 这样做是为了减轻先加入的一端的负担
-	 IP受限/端口受限 <-> IP受限/端口受限
-		两端都作为"服务器",主动连接消息由另外一方发起,具体双方要猜测的对方端口号是什么,需要TURN服务器根据对方的公网IP和端口号来猜测
-	 对称形 <-> IP受限/端口受限 ⏳尚未验证下方观点
-		由于对称型发出去的消息需要原路返回,也要求返回方从原路返回,而IP受限/端口受限的NAT设备不会原路返回,每次都会更换端口号,所以这种情况下是无法打洞成功的
-	 对称型 <-> 对称型
-		无法打洞,使用TURN服务器中继
-	 */
-		// var fullConePair = laterPair.NATType == NATTypeEnum.FullCone ? laterPair : null;
-		// var fullConePairAnOther = earlierPair.NATType == NATTypeEnum.FullCone ? earlierPair : null;
-		// var restrictedConePair = laterPair.NATType  == NATTypeEnum.RestrictedCone
-		// 	? laterPair
-		// 	: earlierPair.NATType == NATTypeEnum.RestrictedCone
-		// 		? earlierPair
-		// 		: null;
-		// var restrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.RestrictedCone
-		// 	? earlierPair
-		// 	: laterPair.NATType == NATTypeEnum.RestrictedCone
-		// 		? laterPair
-		// 		: null;
-		// var portRestrictedConePair = laterPair.NATType == NATTypeEnum.PortRestrictedCone
-		// 	? laterPair
-		// 	: earlierPair.NATType == NATTypeEnum.PortRestrictedCone
-		// 		? earlierPair
-		// 		: null;
-		// var portRestrictedConePairAnOther = earlierPair.NATType == NATTypeEnum.PortRestrictedCone
-		// 	? earlierPair
-		// 	: laterPair.NATType == NATTypeEnum.PortRestrictedCone
-		// 		? laterPair
-		// 		: null;
-		// var symmetricPair = laterPair.NATType == NATTypeEnum.Symmetric
-		// 	? laterPair
-		// 	: earlierPair.NATType == NATTypeEnum.Symmetric
-		// 		? earlierPair
-		// 		: null;
-		// var symmetricPairAnOther = earlierPair.NATType == NATTypeEnum.Symmetric
-		// 	? earlierPair
-		// 	: laterPair.NATType == NATTypeEnum.Symmetric
-		// 		? laterPair
-		// 		: null;
 		TURNClient? fullConePair = null, fullConePairAnOther = null;
 		TURNClient? restrictedConePair = null , restrictedConePairAnOther = null;
 		TURNClient? portRestrictedConePair = null, portRestrictedConePairAnOther = null;
@@ -380,112 +271,94 @@ public class TurnServer
 		if (fullConePair != null && fullConePairAnOther != null)
 		{
 			// 全锥形 <-> 全锥形
-			isBothNeedPassiveDoHolePunching = false;
-			active = fullConePairAnOther;
-			passive = fullConePair;
+			active = fullConePair;
+			passive = fullConePairAnOther;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 
 		if (fullConePair != null && restrictedConePair != null)
 		{
-			// 全锥形 <-> IP受限受限
-			isBothNeedPassiveDoHolePunching = false;
-			active = restrictedConePair;
-			passive = fullConePair;
+			// 全锥形 <-> IP受限
+			active = fullConePair;
+			passive = restrictedConePair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (fullConePair != null && portRestrictedConePair != null)
 		{
 			// 全锥形 <-> 端口受限
-			isBothNeedPassiveDoHolePunching = false;
-			active = portRestrictedConePair;
-			passive = fullConePair;
+			active = fullConePair;
+			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (fullConePair != null && symmetricPair != null)
 		{
 			// 全锥形 <-> 对称形
-			isBothNeedPassiveDoHolePunching = false;
-			active = symmetricPair;
-			passive = fullConePair;
+			active = fullConePair;
+			passive = symmetricPair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && restrictedConePairAnOther != null)
 		{
 			// IP受限 <-> IP受限
-			isBothNeedPassiveDoHolePunching = true;
-			active = restrictedConePairAnOther;
-			passive = restrictedConePair;
+			active = restrictedConePair;
+			passive = restrictedConePairAnOther;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && portRestrictedConePair != null)
 		{
 			// IP受限 <-> 端口受限
-			isBothNeedPassiveDoHolePunching = true;
-			active = portRestrictedConePair;
-			passive = restrictedConePair;
+			active = restrictedConePair;
+			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (restrictedConePair != null && symmetricPair != null)
 		{
 			// IP受限 <-> 对称形
-			isBothNeedPassiveDoHolePunching = false;
-			active = symmetricPair;
-			passive = restrictedConePair;
+			active = restrictedConePair;
+			passive = symmetricPair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (portRestrictedConePair != null && portRestrictedConePairAnOther != null)
 		{
 			// 端口受限 <-> 端口受限
-			isBothNeedPassiveDoHolePunching = true;
 			active = portRestrictedConePairAnOther;
 			passive = portRestrictedConePair;
 			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
 			return true;
 		}
 		if (portRestrictedConePair != null && symmetricPair != null)
 		{
 			// 端口受限 <-> 对称形
-			isBothNeedPassiveDoHolePunching = true;
-			active = symmetricPair;
-			passive = portRestrictedConePair;
-			errorMessage = string.Empty;
-			Console.WriteLine($"主动方类型: {active.NATType}, 被动方类型: {passive.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
-			return true;
+			active = null;
+			passive = null;
+			errorMessage = "端口受限型和对称形之间的打洞, 没有办法进行,因为虽然端口受限型的端口虽然不会变化,但是必须要端口受限型先发送链接到对方(确切的端口)然后对方才能通过这个端口返回数据,但是对称型的端口一般又没法预测,随机性很高,所以没法打洞)";
+			Console.WriteLine(errorMessage);
+			return false;
 		}
 		if (symmetricPair != null && symmetricPairAnOther != null)
 		{
 			// 对称形 <-> 对称形
-			isBothNeedPassiveDoHolePunching = false;
 			active = null;
 			passive = null;
 			errorMessage = "对称形之间无法打洞";
-			Console.WriteLine($"主动方类型: {active?.NATType}, 被动方类型: {passive?.NATType}, 是否都需要主动打洞: {isBothNeedPassiveDoHolePunching}");
+			Console.WriteLine(errorMessage);
 			return false;
 		}
 		else
 		{
-			Console.WriteLine($"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}");
+			var message = $"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}";
+			Console.WriteLine(message);
 			// 对称形 <-> 对称形
-			isBothNeedPassiveDoHolePunching = true;
 			active = null;
 			passive = null;
-			errorMessage = "对称形之间无法打洞";
+			errorMessage = message;
 			return false;
 		}
 	}
