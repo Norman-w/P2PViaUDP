@@ -365,6 +365,18 @@ void ProcessIsSymmetricCheckingRequest(ushort serverPort, StunNATTypeCheckingReq
 		stunClient = new StunClient(request.ClientId, new IPEndPoint(IPAddress.Any, serverPort), remoteEndPoint);
 		clientDict.TryAdd(request.ClientId, stunClient);
 	}
+
+	#region 当工作在从服务器时,如果是主端口,延迟100毫秒返回,如果是从端口,延迟200毫秒返回,避免发给客户端的消息拥挤
+
+	if (isSlaveServer)
+	{
+		var delay = serverPort == primaryPort ? 100 : 200;
+		Thread.Sleep(delay);
+		Console.WriteLine(
+			$"{(isFromMainStunServer ? "主STUN服务器" : "从STUN服务器")} 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,延迟{delay}ms");
+	}
+
+	#endregion
 	//返回响应给客户端
 	var responseBytes = response.ToBytes();
 	udpPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);

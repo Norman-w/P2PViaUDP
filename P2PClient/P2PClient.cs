@@ -140,8 +140,6 @@ public class P2PClient
 
 	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
-		Console.WriteLine(
-			$"收到来自: {receiverRemoteEndPoint} 的消息，大小: {data.Length}, 接收端口: {_udpClient.Client.LocalEndPoint}");
 		var messageType = (MessageType)data[0];
 		Console.WriteLine($"消息类型: {messageType}");
 		switch (messageType)

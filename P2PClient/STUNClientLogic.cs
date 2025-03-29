@@ -69,6 +69,9 @@ public class STUNClient
 		Console.WriteLine("**************************[哪种锥形]检测完毕,进入[是否对称型NAT]测试**************************");
 		Console.ResetColor();
 		
+		//第一轮和第二轮之间停顿1000ms,因为第一轮的检测结果会影响第二轮的检测结果
+		await Task.Delay(1000);
+		
 		await ConductSymmetricNATCheckAsync(serverEndPoint);
 	}
 
@@ -544,22 +547,19 @@ public class STUNClient
 			// 主服务器主端口
 			await _udpClient.SendAsync(data, data.Length, 
 				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainAndSlaveServerPrimaryPort));
-			// Thread.Sleep(2000);
-			
+			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到主服务器主端口");
 			// 主服务器次端口
 			await _udpClient.SendAsync(data, data.Length,
 				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainServerSecondaryPort));
-			// Thread.Sleep(2000);
-
+			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到主服务器次端口");
 			// 从服务器主端口
 			await _udpClient.SendAsync(data, data.Length,
 				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNMainAndSlaveServerPrimaryPort));
-			// Thread.Sleep(2000);
-
+			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到从服务器主端口");
 			// 从服务器次端口
 			await _udpClient.SendAsync(data, data.Length,
 				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNSlaveServerSecondaryPort));
-			// Thread.Sleep(2000);
+			
 
 			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到所有端口");
 		}
