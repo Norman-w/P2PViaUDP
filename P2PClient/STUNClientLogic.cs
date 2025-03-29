@@ -70,7 +70,7 @@ public class STUNClient
 		Console.ResetColor();
 		
 		//第一轮和第二轮之间停顿1000ms,因为第一轮的检测结果会影响第二轮的检测结果
-		await Task.Delay(1000);
+		await Task.Delay(2000);
 		
 		await ConductSymmetricNATCheckAsync(serverEndPoint);
 	}

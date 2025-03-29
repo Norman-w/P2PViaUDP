@@ -27,7 +27,7 @@ public class P2PClient
 	/// </summary>
 	private readonly Dictionary<Guid, PeerClient> _peerClients = new();
 
-	private readonly UdpClient _udpClient = new();
+	private readonly UdpClient _udpClient = new(new IPEndPoint(IPAddress.Any, 0));
 	private readonly P2PClientConfig _settings = P2PClientConfig.Default;
 
 	private IPEndPoint? _myEndPointFromMainStunSecondPortReply;
@@ -66,7 +66,7 @@ public class P2PClient
 		try
 		{
 			//发送给Localhost:65535一条消息,为了让udpClient进入到bind状态
-			await _udpClient.SendAsync(new byte[] { 0 }, 1, new IPEndPoint(IPAddress.Loopback, 65535));
+			// await _udpClient.SendAsync(new byte[] { 0 }, 1, new IPEndPoint(IPAddress.Any, 0));
 			// 持续监听
 			_ = Task.Run(StartListeningAsync);
 			// STUN 阶段
