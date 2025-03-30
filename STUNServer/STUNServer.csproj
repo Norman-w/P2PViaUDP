@@ -11,4 +11,8 @@
       <ProjectReference Include="..\P2PViaUDP\P2PViaUDP.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="publish\P2PViaUDP.pdb" />
+    </ItemGroup>
+
 </Project>
