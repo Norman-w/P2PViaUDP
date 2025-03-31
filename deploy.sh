@@ -35,13 +35,15 @@ echo "1) STUNServer"
 echo "2) TURNServer"
 read -p "请输入选项 (1-2): " choice
 
-# 设置服务名称
+# 设置服务名称和端口
 case $choice in
     1)
         SERVICE_NAME="STUNServer"
+        PORT=3478
         ;;
     2)
         SERVICE_NAME="TURNServer"
+        PORT=3749
         ;;
     *)
         echo -e "${RED}无效的选项${NC}"
@@ -54,6 +56,32 @@ if [ ! -d "$SERVICE_NAME" ]; then
     echo -e "${RED}错误: 本地目录 $SERVICE_NAME 不存在${NC}"
     exit 1
 fi
+
+# 在服务器端检查端口占用并停止进程
+echo -e "${YELLOW}检查服务器端口 $PORT 是否被占用...${NC}"
+sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "if lsof -i udp:${PORT} > /dev/null 2>&1; then
+    echo '端口 ${PORT} 被占用，正在停止相关进程...'
+    # 使用lsof命令查找占用UDP端口的进程
+    pid=\$(lsof -ti udp:${PORT})
+    if [ ! -z \"\$pid\" ]; then
+        echo '正在停止进程 \$pid...'
+        # 使用kill -9强制终止进程
+        kill -9 \$pid 2>/dev/null || true
+        sleep 2
+        # 再次检查端口是否被占用
+        if lsof -i udp:${PORT} > /dev/null 2>&1; then
+            echo '无法停止占用端口的进程，请手动检查'
+            exit 1
+        else
+            echo '成功停止占用端口的进程'
+        fi
+    else
+        echo '无法找到占用端口的进程，请手动检查'
+        exit 1
+    fi
+else
+    echo '端口 ${PORT} 未被占用'
+fi"
 
 # 创建远程目录
 echo -e "${YELLOW}创建远程目录...${NC}"
@@ -87,3 +115,22 @@ sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "cd $REMOTE_DI
 
 # 清除密码变量
 unset SERVER_PASS 
+
+# 等待服务启动
+echo -e "${YELLOW}等待服务启动...${NC}"
+sleep 2
+
+# 检查服务是否成功启动
+if sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "netstat -an | grep -q ':${PORT}.*LISTEN'"; then
+    echo -e "${GREEN}服务启动成功${NC}"
+else
+    echo -e "${RED}服务启动失败${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}部署完成！${NC}"
+echo -e "${YELLOW}$SERVICE_NAME 运行在端口 $PORT${NC}"
+echo -e "${YELLOW}按Ctrl+C可以停止服务${NC}"
+
+# 保持脚本运行以查看日志
+sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "tail -f $REMOTE_DIR/$SERVICE_NAME/logs/*.log" 

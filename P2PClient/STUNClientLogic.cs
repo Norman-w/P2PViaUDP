@@ -428,6 +428,10 @@ public class STUNClient
 
 				if (rsp.IsFromMainSTUNServer)
 				{
+					Console.ForegroundColor = ConsoleColor.White;
+					Console.BackgroundColor = ConsoleColor.DarkBlue;
+					Console.WriteLine($"主服务器说你的出网信息是:{rsp.DetectedClientNATEndPoint}");
+					Console.ResetColor();
 					if (!portsToMainServer.Contains(port))
 					{
 						portsToMainServer.Add(port);

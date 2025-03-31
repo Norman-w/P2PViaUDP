@@ -333,7 +333,7 @@ public class P2PClient
 			// 从字节数组中解析广播消息
 			var broadcastMessage = TURNBroadcastMessage.FromBytes(data);
 			Console.WriteLine(
-				$"从自己在TURN服务器上暴露的外网端口: {broadcastMessage.ClientSideEndPointToTURN} 收到消息: {broadcastMessage}");
+				$"从自己在TURN服务器上暴露的外网端口: {_myEndPointFromMainStunSecondPortReply} 收到消息: {broadcastMessage}");
 			if (broadcastMessage.Guid == _clientId)
 			{
 				Console.WriteLine("收到自己的广播消息，忽略");
@@ -368,9 +368,9 @@ public class P2PClient
 				broadcastMessage.IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient;
 			if (needWaitForPrepareAcceptIncomingConnectionForThisClient)
 			{
-				Console.WriteLine($"收到广播消息,需要我等待对方抛橄榄枝: {broadcastMessage.ClientSideEndPointToTURN}");
-				await Task.Delay(500);
-				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方: {broadcastMessage.ClientSideEndPointToTURN}");
+				Console.WriteLine($"收到广播消息,需要我等待对方({broadcastMessage.ClientSideEndPointToTURN})抛橄榄枝到我的地址: {_myEndPointFromMainStunSecondPortReply}");
+				await Task.Delay(2222);
+				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
 			}
 
 			#endregion
