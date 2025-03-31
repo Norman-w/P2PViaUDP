@@ -115,22 +115,3 @@ sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "cd $REMOTE_DI
 
 # 清除密码变量
 unset SERVER_PASS 
-
-# 等待服务启动
-echo -e "${YELLOW}等待服务启动...${NC}"
-sleep 2
-
-# 检查服务是否成功启动
-if sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "netstat -an | grep -q ':${PORT}.*LISTEN'"; then
-    echo -e "${GREEN}服务启动成功${NC}"
-else
-    echo -e "${RED}服务启动失败${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}部署完成！${NC}"
-echo -e "${YELLOW}$SERVICE_NAME 运行在端口 $PORT${NC}"
-echo -e "${YELLOW}按Ctrl+C可以停止服务${NC}"
-
-# 保持脚本运行以查看日志
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "tail -f $REMOTE_DIR/$SERVICE_NAME/logs/*.log" 

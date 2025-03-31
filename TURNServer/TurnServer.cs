@@ -42,11 +42,16 @@ public class TurnServer
 		Console.WriteLine($"NAT一致性检查服务器启动在端口: {_settings.NATTypeConsistencyKeepingCheckingPort}");
 
 		// 启动两个接收任务
-		_ = Task.Run(ReceiveMainServerMessagesAsync);
-		_ = Task.Run(ReceiveNATConsistencyCheckMessagesAsync);
+		var mainTask = Task.Run(ReceiveMainServerMessagesAsync);
+		var natCheckTask = Task.Run(ReceiveNATConsistencyCheckMessagesAsync);
 		
-		//等待两个都退出则是退出
-		await Task.WhenAll();
+		// 等待任务完成（实际上这两个任务应该不会自然结束，除非抛出异常或主动停止）
+		var tasks = new[] { mainTask, natCheckTask };
+		await Task.WhenAll(tasks);
+		
+		// 添加额外的阻塞机制，防止服务器退出
+		Console.WriteLine("服务器已启动，按任意键停止服务...");
+		Console.ReadKey();
 	}
 
 	private async Task ReceiveMainServerMessagesAsync()
