@@ -51,6 +51,8 @@ UdpClient? mainServerWhichKindOfConeServer = null;
 UdpClient? mainServerWhichKindOfConeSecondarySender = null;
 UdpClient? mainServerIsSymmetricPrimaryServer = null;
 UdpClient? mainServerIsSymmetricSecondaryServer = null;
+//用于主服务器发送给从服务器的透传消息的发送器,只有主服务器会初始化这个实例
+UdpClient? mainStunToSlaveStunMainServerSideSender = null;
 
 UdpClient? slaveServerWhichKindOfConeByPassReceiver = null;
 UdpClient? slaveServerWhichKindOfConePrimarySender = null;
@@ -66,6 +68,7 @@ if (!isSlaveServer)
 	mainServerIsSymmetricSecondaryServer =
 		new UdpClient(new IPEndPoint(IPAddress.Any, mainServerIsSymmetricRequestAndResponseSecondaryPort));
 	mainServerWhichKindOfConeSecondarySender = new UdpClient();
+	mainStunToSlaveStunMainServerSideSender = new UdpClient();
 }
 //初始化从服务器
 else
@@ -78,30 +81,6 @@ else
 		new UdpClient(new IPEndPoint(IPAddress.Any, slaveServerIsSymmetricRequestAndResponseSecondaryPort));
 	slaveServerWhichKindOfConePrimarySender = new UdpClient();
 	slaveServerWhichKindOfConeSecondarySender = new UdpClient();
-}
-
-#endregion
-
-//用于主服务器发送给从服务器的透传消息的发送器,只有主服务器会初始化这个实例
-UdpClient? mainStunToSlaveStunMainServerSideSender = null;
-if (!isSlaveServer)
-{
-	mainStunToSlaveStunMainServerSideSender = new UdpClient();
-	Console.ForegroundColor = ConsoleColor.DarkGreen;
-	Console.WriteLine($"主服务器的透传消息发送器已启动,将会经由端口: {settings.SlaveServerReceiveMainServerBytesPort}透传客户端发过来的 哪种锥形检测的消息");
-	Console.ResetColor();
-}
-
-#region 主从STUN服务器的内网连接(只有STUN服务器程序工作在从服务器时才执行的逻辑)
-
-//从服务器端定义的,用于监听主服务器透传消息过来的udp消息接收器.主STUN服务器不会初始化这个实例.
-if (isSlaveServer)
-{
-	var mainStunToSlaveStunSlaveServerSideListener = new UdpClient(new IPEndPoint(IPAddress.Any, settings.SlaveServerReceiveMainServerBytesPort));
-	mainStunToSlaveStunSlaveServerSideListener.BeginReceive(ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback, mainStunToSlaveStunSlaveServerSideListener);
-	Console.ForegroundColor = ConsoleColor.DarkGreen;
-	Console.WriteLine($"从服务器的透传消息接收器已启动,监听端口: {settings.SlaveServerReceiveMainServerBytesPort}");
-	Console.ResetColor();
 }
 
 #endregion
@@ -135,7 +114,7 @@ switch (isSlaveServer)
 		Console.WriteLine("主服务器的UDP客户端未初始化,无法绑定接收回调");
 		return;
 	case true:
-		slaveServerWhichKindOfConeByPassReceiver.BeginReceive(ReceiveCallback, slaveServerWhichKindOfConeByPassReceiver);
+		slaveServerWhichKindOfConeByPassReceiver.BeginReceive(ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback, slaveServerWhichKindOfConeByPassReceiver);
 		slaveServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricPrimaryServer);
 		slaveServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricSecondaryServer);
 		break;
