@@ -72,7 +72,7 @@ if [ -d "P2PViaUDP" ]; then
 fi
 
 # 复制服务项目
-echo -e "${YELLOW}复制$SERVICE_NAME项目...${NC}"
+echo -e "${YELLOW}复制$SERVICE_NAME 项目...${NC}"
 sshpass -p "$SERVER_PASS" rsync -avz --progress \
     --exclude 'bin/' \
     --exclude 'obj/' \

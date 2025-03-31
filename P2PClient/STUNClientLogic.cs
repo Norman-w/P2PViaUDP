@@ -165,8 +165,6 @@ public class STUNClient
 			Console.WriteLine("开始向所有STUN服务器端口发送请求...");
 			await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequest);
 			
-			var receivedCount = 0;
-
 			//等异步5秒,每100毫秒检测一次是否已经接收到了足够的响应,如果没有就重试,如果重试次数超过了最大重试次数,就结束测试
 			var maxWaitTime = 5000;
 			var startTime = DateTime.Now;
@@ -176,7 +174,7 @@ public class STUNClient
 			}
 
 			// 检查结果
-			Console.WriteLine($"最终收到 {receivedCount} 个响应，继续分析NAT类型...");
+			Console.WriteLine($"是否为对称型NAT检测最终收到 {_isSymmetricResponseQueue.Count} 个响应");
 
 			#endregion
 
@@ -221,13 +219,13 @@ public class STUNClient
 		 如果有4个回信是从主服务器的主端口从端口以及从服务器的主端口从端口的,那就是全锥形的 啥都可以访问的
 		*/
 		var fromMainServerPrimaryPort = responses.FirstOrDefault(r =>
-			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerPrimaryPort);
+			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeMainServerRequestAndResponsePort);
 		var fromMainServerSecondaryPort = responses.FirstOrDefault(r =>
-			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerSecondaryPort);
+			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeMainServerResponseSecondaryPort);
 		var fromSlaveServerPrimaryPort = responses.FirstOrDefault(r =>
-			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerPrimaryPort);
+			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeSlaveServerResponsePrimaryPort);
 		var fromSlaveServerSecondaryPort = responses.FirstOrDefault(r =>
-			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerSecondaryPort);
+			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeSlaveServerResponseSecondaryPort);
 		Console.WriteLine("以下是 [哪种锥形] 检测从的服务端回访来源信息:");
 		Console.ForegroundColor = ConsoleColor.DarkYellow;
 		if (fromMainServerPrimaryPort != null)
