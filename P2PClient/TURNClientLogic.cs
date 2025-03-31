@@ -133,13 +133,13 @@ public static class TURNClientLogic
 		if (myOldEndPoint != null && responseMessage.EndPoint.Equals(myOldEndPoint))
 		{
 			Console.ForegroundColor = ConsoleColor.Green;
-			Console.WriteLine($"【NAT一致性检查通过】: 当前外网地址 {responseMessage} 与注册时地址 {myOldEndPoint} 一致");
+			Console.WriteLine($"【NAT一致性检查通过】: 当前外网地址 {responseMessage.EndPoint} 与注册时地址 {myOldEndPoint} 一致");
 			Console.ResetColor();
 		}
 		else
 		{
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine($"【NAT一致性检查失败】: 当前外网地址 {responseMessage} 与注册时地址 {myOldEndPoint} 不一致");
+			Console.WriteLine($"【NAT一致性检查失败】: 当前外网地址 {responseMessage.EndPoint} 与注册时地址 {myOldEndPoint} 不一致");
 			Console.WriteLine($"注册时的地址: {myOldEndPoint}, 当前地址: {responseMessage}");
 			Console.ResetColor();
 		}
