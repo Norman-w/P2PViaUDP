@@ -16,25 +16,31 @@ public class STUNServerConfig : ConfigBase, IConfig
 	public bool IsSlaveServer { get; set; }
 
 	/// <summary>
-	/// 主服务器的主要端口, 默认3478
+	/// 主服务器用于检测客户端是哪种锥形的网络
+	/// 服务端收到消息以后除了从这个端口的链接返回,还会转发到自己的哪种锥形监测的另外一个端口以及从服务器的哪种锥形监测的主从端口进行返回
+	/// 客户端根据收到的响应来确认自己是什么型的网络
 	/// </summary>
-	public ushort MainServerAndSlaveServerPrimaryPort { get; private set; }
+	public ushort MainServerWhichKindOfConeRequestAndResponsePort { get; private set; }
+	/// <summary>
+	/// 主服务器的用于检测客户端是哪种锥形的网络的应答时使用的次要端口,主服务器接受到检测请求后也会经由这里返回数据给客户端,不接收.
+	/// </summary>
+	public ushort MainServerWhichKindOfConeResponseSecondaryPort { get; private set; }
+	/// <summary>
+	/// 从服务器用于检测客户端是哪种锥形的网络的主要端口,得到主服务器的透传信号后,用于返回数据给客户端,不接收.
+	/// </summary>
+	public ushort SlaveServerWhichKindOfConeResponsePrimaryPort { get; private set; }
+	/// <summary>
+	/// 从服务器用于检测客户端是哪种锥形的网络的次要端口,得到主服务器的透传信号后,用于返回数据给客户端,不接收.
+	/// </summary>
+	public ushort SlaveServerWhichKindOfConeResponseSecondaryPort { get; private set; }
 
 	/// <summary>
-	/// 主服务器的次要端口, 默认3479
+	/// 主服务器用来接受并返回给客户端的用于检查"是否对称型NAT"的主接口
 	/// </summary>
-	public ushort MainServerSecondaryPort { get; private set; }
-
-	/// <summary>
-	/// 从服务器的主要端口, 默认3478
-	/// </summary>
-	public ushort SlaveServerPrimaryPort { get; private set; }
-
-	/// <summary>
-	/// 从服务器的次要端口, 默认3480
-	/// </summary>
-	public ushort SlaveServerSecondaryPort { get; private set; }
-
+	public ushort MainServerIsSymmetricRequestAndResponsePrimaryPort { get; private set; }
+	public ushort MainServerIsSymmetricRequestAndResponseSecondaryPort { get; private set; }
+	public ushort SlaveServerIsSymmetricRequestAndResponsePrimaryPort { get; private set; }
+	public ushort SlaveServerIsSymmetricRequestAndResponseSecondaryPort { get; private set; }
 	/// <summary>
 	/// 主服务器的内网IP
 	/// </summary>
@@ -54,10 +60,25 @@ public class STUNServerConfig : ConfigBase, IConfig
 	public static STUNServerConfig Default => new("192.168.6.200", "192.168.1.252")
 	{
 		IsSlaveServer = false,
-		MainServerAndSlaveServerPrimaryPort = 3478,
-		MainServerSecondaryPort = 3479,
-		SlaveServerPrimaryPort = 3478,
-		SlaveServerSecondaryPort = 3480,
+
+		#region 用于检测"是哪种锥形"的端口设置
+
+		MainServerWhichKindOfConeRequestAndResponsePort = 3478,
+		MainServerWhichKindOfConeResponseSecondaryPort = 3479,
+		SlaveServerWhichKindOfConeResponsePrimaryPort = 3480,
+		SlaveServerWhichKindOfConeResponseSecondaryPort = 3481,
+
+		#endregion
+
+		#region 用于检测"是否对称型"的端口设置
+
+		MainServerIsSymmetricRequestAndResponsePrimaryPort = 3482,
+		MainServerIsSymmetricRequestAndResponseSecondaryPort = 3483,
+		SlaveServerIsSymmetricRequestAndResponsePrimaryPort = 3484,
+		SlaveServerIsSymmetricRequestAndResponseSecondaryPort = 3485,
+
+		#endregion
+		
 		SlaveServerReceiveMainServerBytesPort = 3500
 	};
 }

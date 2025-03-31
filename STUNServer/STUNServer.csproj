@@ -13,6 +13,8 @@
 
     <ItemGroup>
       <None Remove="publish\P2PViaUDP.pdb" />
+      <None Remove="publish\STUNServer.dll" />
+      <None Remove="publish\STUNServer.pdb" />
     </ItemGroup>
 
 </Project>

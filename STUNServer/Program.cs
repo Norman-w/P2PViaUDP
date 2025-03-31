@@ -33,17 +33,52 @@ if (Debugger.IsAttached)
 #endregion
 
 var isSlaveServer = settings.IsSlaveServer;
-var primaryPort = settings.MainServerAndSlaveServerPrimaryPort;
-var secondaryPort = isSlaveServer ? settings.SlaveServerSecondaryPort : settings.MainServerSecondaryPort;
+var mainServerWhichKindOfConeRequestAndResponsePort = settings.MainServerWhichKindOfConeRequestAndResponsePort;
+var mainServerWhichKindOfConeResponseSecondaryPort = settings.MainServerWhichKindOfConeResponseSecondaryPort;
+var slaveServerWhichKindOfConeResponsePrimaryPort = settings.SlaveServerWhichKindOfConeResponsePrimaryPort;
+var slaveServerWhichKindOfConeResponseSecondaryPort = settings.SlaveServerWhichKindOfConeResponseSecondaryPort;
 
-//创建一个UDP服务器,绑定默认的初始化端口
-var primaryPortServer = new UdpClient(new IPEndPoint(IPAddress.Any, primaryPort));
-Console.WriteLine($"{(isSlaveServer ? "从服务器" : "主服务器")} 的主要端口服务已启动,监听端口: {primaryPort}");
+var mainServerIsSymmetricRequestAndResponsePrimaryPort = settings.MainServerIsSymmetricRequestAndResponsePrimaryPort;
+var mainServerIsSymmetricRequestAndResponseSecondaryPort = settings.MainServerIsSymmetricRequestAndResponseSecondaryPort;
+var slaveServerIsSymmetricRequestAndResponsePrimaryPort = settings.SlaveServerIsSymmetricRequestAndResponsePrimaryPort;
+var slaveServerIsSymmetricRequestAndResponseSecondaryPort = settings.SlaveServerIsSymmetricRequestAndResponseSecondaryPort;
 
-//额外的STUN服务器端口
-var secondaryPortServer = new UdpClient(new IPEndPoint(IPAddress.Any, secondaryPort));
+var slaveServerReceiveMainServerBytesPort = settings.SlaveServerReceiveMainServerBytesPort;
+// var slaveServerInternalIP = settings.SlaveServerInternalIP;
 
-Console.WriteLine($"{(isSlaveServer ? "从服务器" : "主服务器")} 的次要端口服务已启动,监听端口: {secondaryPort}");
+
+UdpClient? mainServerWhichKindOfConeServer = null;
+UdpClient? mainServerWhichKindOfConeSecondarySender = null;
+UdpClient? mainServerIsSymmetricPrimaryServer = null;
+UdpClient? mainServerIsSymmetricSecondaryServer = null;
+
+UdpClient? slaveServerWhichKindOfConeByPassReceiver = null;
+UdpClient? slaveServerWhichKindOfConePrimarySender = null;
+UdpClient? slaveServerWhichKindOfConeSecondarySender = null;
+UdpClient? slaveServerIsSymmetricPrimaryServer = null;
+UdpClient? slaveServerIsSymmetricSecondaryServer = null;
+//初始化主服务器
+if (!isSlaveServer)
+{
+	Console.WriteLine("当前工作在主服务器模式下");
+	mainServerWhichKindOfConeServer = new UdpClient(new IPEndPoint(IPAddress.Any, mainServerWhichKindOfConeRequestAndResponsePort));
+	mainServerIsSymmetricPrimaryServer = new UdpClient(new IPEndPoint(IPAddress.Any, mainServerIsSymmetricRequestAndResponsePrimaryPort));
+	mainServerIsSymmetricSecondaryServer =
+		new UdpClient(new IPEndPoint(IPAddress.Any, mainServerIsSymmetricRequestAndResponseSecondaryPort));
+	mainServerWhichKindOfConeSecondarySender = new UdpClient();
+}
+//初始化从服务器
+else
+{
+	Console.WriteLine("当前工作在从服务器模式下");
+	slaveServerWhichKindOfConeByPassReceiver = new UdpClient(new IPEndPoint(IPAddress.Any, slaveServerReceiveMainServerBytesPort));
+	slaveServerIsSymmetricPrimaryServer =
+		new UdpClient(new IPEndPoint(IPAddress.Any, slaveServerIsSymmetricRequestAndResponsePrimaryPort));
+	slaveServerIsSymmetricSecondaryServer =
+		new UdpClient(new IPEndPoint(IPAddress.Any, slaveServerIsSymmetricRequestAndResponseSecondaryPort));
+	slaveServerWhichKindOfConePrimarySender = new UdpClient();
+	slaveServerWhichKindOfConeSecondarySender = new UdpClient();
+}
 
 #endregion
 
@@ -85,8 +120,31 @@ var cleanupTimer = new Timer(CleanupInactiveClients, null, TimeSpan.FromMinutes(
 
 #region 绑定所有服务器端点的接收回调
 
-primaryPortServer.BeginReceive(ReceiveCallback, (primaryPort, primaryPortServer));
-secondaryPortServer.BeginReceive(ReceiveCallback, (secondaryPort, secondaryPortServer));
+switch (isSlaveServer)
+{
+	case true when 
+		(slaveServerWhichKindOfConeByPassReceiver == null
+		 || slaveServerIsSymmetricPrimaryServer == null
+		 || slaveServerIsSymmetricSecondaryServer == null):
+		Console.WriteLine("从服务器的UDP客户端未初始化,无法绑定接收回调");
+		return;
+	case false when
+		(mainServerWhichKindOfConeServer == null
+		 || mainServerIsSymmetricPrimaryServer == null
+		 || mainServerIsSymmetricSecondaryServer == null):
+		Console.WriteLine("主服务器的UDP客户端未初始化,无法绑定接收回调");
+		return;
+	case true:
+		slaveServerWhichKindOfConeByPassReceiver.BeginReceive(ReceiveCallback, slaveServerWhichKindOfConeByPassReceiver);
+		slaveServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricPrimaryServer);
+		slaveServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricSecondaryServer);
+		break;
+	case false:
+		mainServerWhichKindOfConeServer.BeginReceive(ReceiveCallback, mainServerWhichKindOfConeServer);
+		mainServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, mainServerIsSymmetricPrimaryServer);
+		mainServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback, mainServerIsSymmetricSecondaryServer);
+		break;
+}
 
 #endregion
 
@@ -212,21 +270,33 @@ void ReceiveCallback(IAsyncResult ar)
 
 #region 优雅关闭服务器
 
+void Release()
+{
+	mainServerWhichKindOfConeServer?.Close();
+	mainServerIsSymmetricPrimaryServer?.Close();
+	mainServerIsSymmetricSecondaryServer?.Close();
+	mainServerWhichKindOfConeSecondarySender?.Close();
+	mainStunToSlaveStunMainServerSideSender?.Close();
+
+	
+	slaveServerWhichKindOfConeByPassReceiver?.Close();
+	slaveServerIsSymmetricPrimaryServer?.Close();
+	slaveServerIsSymmetricSecondaryServer?.Close();
+	slaveServerWhichKindOfConePrimarySender?.Close();
+	slaveServerWhichKindOfConeSecondarySender?.Close();
+}
+
 Console.CancelKeyPress += (_, e) =>
 {
 	e.Cancel = true; // 防止程序立即退出
 	Console.WriteLine("正在关闭服务器...");
-	primaryPortServer.Close();
-	secondaryPortServer.Close();
-
+	Release();
+	
 	Console.WriteLine("服务器已关闭");
 	Environment.Exit(0);
 };
 
 Console.ReadLine();
-primaryPortServer.Close();
-secondaryPortServer.Close();
-
 cleanupTimer.Dispose();
 return;
 
@@ -365,18 +435,6 @@ void ProcessIsSymmetricCheckingRequest(ushort serverPort, StunNATTypeCheckingReq
 		stunClient = new StunClient(request.ClientId, new IPEndPoint(IPAddress.Any, serverPort), remoteEndPoint);
 		clientDict.TryAdd(request.ClientId, stunClient);
 	}
-
-	#region 当工作在从服务器时,如果是主端口,延迟100毫秒返回,如果是从端口,延迟200毫秒返回,避免发给客户端的消息拥挤
-
-	if (isSlaveServer)
-	{
-		var delay = serverPort == primaryPort ? 100 : 200;
-		Thread.Sleep(delay);
-		Console.WriteLine(
-			$"{(isFromMainStunServer ? "主STUN服务器" : "从STUN服务器")} 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,延迟{delay}ms");
-	}
-
-	#endregion
 	//返回响应给客户端
 	var responseBytes = response.ToBytes();
 	udpPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
@@ -402,20 +460,20 @@ void MainStunServerProcessWhichKindOfConeCheckingRequest(
 			request.RequestId,
 			true,
 			false,
-			new IPEndPoint(IPAddress.Any, primaryPort),
+			new IPEndPoint(IPAddress.Any, mainServerWhichKindOfConeRequestAndResponsePort),
 			remoteEndPoint,
 			DateTime.UtcNow
 		);
 		var responseBytes = responseFromMainStunPrimaryPort.ToBytes();
 		//主服务器主端口返回
-		primaryPortServer.Send(responseBytes, responseBytes.Length, remoteEndPoint);
+		mainServerWhichKindOfConeServer!.Send(responseBytes, responseBytes.Length, remoteEndPoint);
 		Console.WriteLine($"主STUN服务器 的端口{serverPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应");
 		//主服务器从端口返回
 		var responseFromMainStunSecondaryPort = new StunNATTypeCheckingResponse(
 			request.RequestId,
 			true,
 			!false,
-			new IPEndPoint(IPAddress.Any, secondaryPort),
+			new IPEndPoint(IPAddress.Any, mainServerWhichKindOfConeResponseSecondaryPort),
 			remoteEndPoint,
 			DateTime.UtcNow
 		);
@@ -424,19 +482,19 @@ void MainStunServerProcessWhichKindOfConeCheckingRequest(
 		#region region 两个response之间有个延迟
 		const int delayBetweenToPackage = 200;
 		Thread.Sleep(delayBetweenToPackage);
-		Console.WriteLine($"①主STUN服务器 的端口{primaryPortServer.Client.LocalEndPoint} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenToPackage}ms后再发送第二条消息");
+		Console.WriteLine($"①主STUN服务器 的端口{mainServerWhichKindOfConeServer.Client.LocalEndPoint} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenToPackage}ms后再发送第二条消息");
 		#endregion
 		
-		secondaryPortServer.Send(responseBytesSecondaryPort, responseBytesSecondaryPort.Length, remoteEndPoint);
+		mainServerWhichKindOfConeSecondarySender!.Send(responseBytesSecondaryPort, responseBytesSecondaryPort.Length, remoteEndPoint);
 		Console.WriteLine(
-			$"②主STUN服务器 的端口{secondaryPortServer.Client.LocalEndPoint} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenToPackage}ms后再发送透传消息");
+			$"②主STUN服务器 的端口{mainServerWhichKindOfConeSecondarySender.Client.LocalEndPoint} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenToPackage}ms后再发送透传消息");
 		//转发给从服务器,从服务器收到以后还会在发出去两条消息到客户端
 		//直接创建一个链接就行
 		var mainToSlaveByPassResponse = new StunNATTypeCheckingResponse(
 			request.RequestId,
 			true,
 			false,
-			new IPEndPoint(IPAddress.Any, primaryPort),
+			new IPEndPoint(IPAddress.Any, mainServerWhichKindOfConeRequestAndResponsePort),
 			remoteEndPoint,
 			DateTime.UtcNow
 		);
@@ -505,7 +563,7 @@ void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult 
 				originalResponse.RequestId,
 				false,
 				true,
-				new IPEndPoint(IPAddress.Any, settings.MainServerAndSlaveServerPrimaryPort),
+				new IPEndPoint(IPAddress.Any, slaveServerWhichKindOfConeResponsePrimaryPort),
 				originalResponse.DetectedClientNATEndPoint,
 				DateTime.UtcNow
 			);
@@ -513,22 +571,17 @@ void ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback(IAsyncResult 
 				originalResponse.RequestId,
 				false,
 				true,
-				new IPEndPoint(IPAddress.Any, settings.SlaveServerSecondaryPort),
+				new IPEndPoint(IPAddress.Any, slaveServerWhichKindOfConeResponseSecondaryPort),
 				originalResponse.DetectedClientNATEndPoint,
 				DateTime.UtcNow
 			);
 			var mainPortResponseBytes = mainPortResponse.ToBytes();
 			var slavePortResponseBytes = slavePortResponse.ToBytes();
 			//尝试从主端口给客户端发回去(当前是从服务器)
-			primaryPortServer.Send(mainPortResponseBytes, mainPortResponseBytes.Length,
+			slaveServerWhichKindOfConePrimarySender!.Send(mainPortResponseBytes, mainPortResponseBytes.Length,
 				originalResponse.DetectedClientNATEndPoint);
-			#region region 两个response之间有个延迟
-			const int delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse = 200;
-			Thread.Sleep(delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse);
-			Console.WriteLine($"从STUN服务器第二轮测试的透传返回已从端口{primaryPort} 向客户端公网{remoteEndPoint} 发送了NAT类型检测响应,等待{delayBetweenSlaveServerPrimaryPortResponseAndSlaveServerSecondaryPortResponse}ms后再发送第二条消息");
-			#endregion
 			//尝试从次端口给客户端发回去(当前是从服务器)
-			secondaryPortServer.Send(slavePortResponseBytes, slavePortResponseBytes.Length,
+			slaveServerWhichKindOfConeSecondarySender!.Send(slavePortResponseBytes, slavePortResponseBytes.Length,
 				originalResponse.DetectedClientNATEndPoint);
 			Console.WriteLine(
 				$"从属STUN服务器收到了主服务器的透传信息,已将消息透传给客户端{originalResponse.DetectedClientNATEndPoint} 以便客户端确认自己的NAT类型(哪种锥形)");

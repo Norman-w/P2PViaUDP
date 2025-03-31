@@ -70,7 +70,9 @@ public class STUNClient
 		Console.ResetColor();
 		
 		//第一轮和第二轮之间停顿1000ms,因为第一轮的检测结果会影响第二轮的检测结果
-		await Task.Delay(2000);
+		const int delayTimeBetweenTwoRounds = 1000 * 28;
+		Console.WriteLine($"等待 {delayTimeBetweenTwoRounds} ms,等待第一轮和第二轮之间的停顿");
+		await Task.Delay(delayTimeBetweenTwoRounds);
 		
 		await ConductSymmetricNATCheckAsync(serverEndPoint);
 	}
