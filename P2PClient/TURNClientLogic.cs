@@ -62,15 +62,14 @@ public static class TURNClientLogic
 
 	#region 检查NAT一致性
 
-	public static async Task CheckNATConsistencyAsync(P2PClientConfig settings, IPEndPoint myEndPoint, Guid clientId, UdpClient udpClient)
+	public static async Task SendCheckNATConsistencyRequestAsync(P2PClientConfig settings, IPEndPoint myEndPoint, Guid clientId, UdpClient udpClient)
 	{
 		try
 		{
-			var checkMessage = new byte[28]; // 4 + 16 + 4 + 4
-			BitConverter.GetBytes((int)MessageType.TURNCheckNATConsistencyRequest).CopyTo(checkMessage, 0);
-			clientId.ToByteArray().CopyTo(checkMessage, 4);
-			myEndPoint.Address.GetAddressBytes().CopyTo(checkMessage, 20);
-			BitConverter.GetBytes(myEndPoint.Port).CopyTo(checkMessage, 24);
+			var checkMessage = new TURNCheckNATConsistencyRequest
+			{
+				ClientId = clientId,
+			};
 
 			var turnServerEndPoint = new IPEndPoint(
 				IPAddress.Parse(settings.TURNServerIP),
@@ -80,52 +79,9 @@ public static class TURNClientLogic
 			Console.WriteLine($"正在检查NAT一致性: {turnServerEndPoint}");
 			Console.WriteLine($"本地终端点: {myEndPoint}");
 
-			await udpClient.SendAsync(checkMessage, checkMessage.Length, turnServerEndPoint);
+			var messageBytes = checkMessage.ToBytes();
+			await udpClient.SendAsync(messageBytes, messageBytes.Length, turnServerEndPoint);
 			Console.WriteLine("NAT一致性检查请求已发送");
-
-			// 等待响应
-			var responseReceived = false;
-			var timeout = DateTime.Now.AddSeconds(5); // 5秒超时
-			
-			while (!responseReceived && DateTime.Now < timeout)
-			{
-				if (udpClient.Available > 0)
-				{
-					var result = await udpClient.ReceiveAsync();
-					var responseMessageType = (MessageType)BitConverter.ToInt32(result.Buffer, 0);
-					
-					if (responseMessageType == MessageType.TURNCheckNATConsistencyResponse)
-					{
-						var responseEndPoint = new IPEndPoint(
-							new IPAddress(result.Buffer.Skip(20).Take(4).ToArray()),
-							BitConverter.ToInt32(result.Buffer, 24)
-						);
-
-						if (responseEndPoint.Equals(myEndPoint))
-						{
-							Console.ForegroundColor = ConsoleColor.Green;
-							Console.WriteLine($"【NAT一致性检查通过】: 当前外网地址 {result.RemoteEndPoint} 与注册时地址 {myEndPoint} 一致");
-							Console.ResetColor();
-						}
-						else
-						{
-							Console.ForegroundColor = ConsoleColor.Red;
-							Console.WriteLine($"【NAT一致性检查失败】: 当前外网地址 {result.RemoteEndPoint} 与注册时地址 {myEndPoint} 不一致");
-							Console.WriteLine($"注册时的地址: {myEndPoint}, 当前地址: {result.RemoteEndPoint}");
-							Console.ResetColor();
-						}
-						responseReceived = true;
-					}
-				}
-				await Task.Delay(100); // 等待一段时间再检查是否有响应
-			}
-			
-			if (!responseReceived)
-			{
-				Console.ForegroundColor = ConsoleColor.Yellow;
-				Console.WriteLine("【NAT一致性检查超时】: 未收到TURN服务器响应");
-				Console.ResetColor();
-			}
 		}
 		catch (Exception ex)
 		{
@@ -166,6 +122,27 @@ public static class TURNClientLogic
 				break;
 			default:
 				throw new ArgumentOutOfRangeException();
+		}
+	}
+
+	public static void ProcessNATConsistencyResponseMessageAsync(byte[] data, IPEndPoint? myOldEndPoint)
+	{
+		var messageType = (MessageType)BitConverter.ToInt32(data, 0);
+		// 处理NAT一致性检查响应
+		if (messageType != MessageType.TURNCheckNATConsistencyResponse) return;
+		var responseMessage = TURNCheckNATConsistencyResponse.FromBytes(data);
+		if (myOldEndPoint != null && responseMessage.EndPoint.Equals(myOldEndPoint))
+		{
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine($"【NAT一致性检查通过】: 当前外网地址 {responseMessage} 与注册时地址 {myOldEndPoint} 一致");
+			Console.ResetColor();
+		}
+		else
+		{
+			Console.ForegroundColor = ConsoleColor.Red;
+			Console.WriteLine($"【NAT一致性检查失败】: 当前外网地址 {responseMessage} 与注册时地址 {myOldEndPoint} 不一致");
+			Console.WriteLine($"注册时的地址: {myOldEndPoint}, 当前地址: {responseMessage}");
+			Console.ResetColor();
 		}
 	}
 }

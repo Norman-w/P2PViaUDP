@@ -118,13 +118,6 @@ public class P2PClient
 				Console.ForegroundColor = ConsoleColor.Cyan;
 				Console.WriteLine($"从: {result.RemoteEndPoint} 收到消息, 消息类型: {messageType}");
 				Console.ResetColor();
-				
-				// 对于NAT一致性检查响应，不需要进一步处理，TURNClientLogic.CheckNATConsistencyAsync已经处理了
-				if (messageType == MessageType.TURNCheckNATConsistencyResponse)
-				{
-					continue;
-				}
-				
 				_ = Task.Run(() => ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint));
 			}
 			catch (Exception ex)
@@ -177,8 +170,7 @@ public class P2PClient
 				break;
 			case MessageType.TURNCheckNATConsistencyRequest:
 			case MessageType.TURNCheckNATConsistencyResponse:
-				// 这两种消息在TURNClientLogic.CheckNATConsistencyAsync中已处理，这里只需记录
-				Console.WriteLine($"收到NAT一致性检查相关消息: {messageType}");
+				TURNClientLogic.ProcessNATConsistencyResponseMessageAsync(data, _myEndPointFromMainStunSecondPortReply);
 				break;
 			default:
 				Console.WriteLine($"未知消息类型: {messageType}");
@@ -374,7 +366,7 @@ public class P2PClient
 				{
 					try
 					{
-						await TURNClientLogic.CheckNATConsistencyAsync(
+						await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
 							_settings,
 							_myEndPointFromMainStunSecondPortReply,
 							_clientId,
@@ -435,7 +427,7 @@ public class P2PClient
 			{
 				try
 				{
-					await TURNClientLogic.CheckNATConsistencyAsync(
+					await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
 						_settings,
 						_myEndPointFromMainStunSecondPortReply,
 						_clientId,
