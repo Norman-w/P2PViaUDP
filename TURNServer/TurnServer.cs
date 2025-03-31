@@ -3,6 +3,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using P2PViaUDP.Model;
 using P2PViaUDP.Model.TURN;
 
 namespace TURNServer;
@@ -38,7 +39,18 @@ public class TurnServer
 
 		_isRunning = true;
 		Console.WriteLine($"TURN服务器启动在端口: {_settings.MainPort}");
+		Console.WriteLine($"NAT一致性检查服务器启动在端口: {_settings.NATTypeConsistencyKeepingCheckingPort}");
 
+		// 启动两个接收任务
+		_ = Task.Run(ReceiveMainServerMessagesAsync);
+		_ = Task.Run(ReceiveNATConsistencyCheckMessagesAsync);
+		
+		//等待两个都退出则是退出
+		await Task.WhenAll();
+	}
+
+	private async Task ReceiveMainServerMessagesAsync()
+	{
 		while (_isRunning)
 		{
 			try
@@ -51,7 +63,55 @@ public class TurnServer
 				Console.WriteLine($"TURN服务器错误: {ex.Message}");
 			}
 		}
-		_isRunning = false;
+	}
+
+	private async Task ReceiveNATConsistencyCheckMessagesAsync()
+	{
+		while (_isRunning)
+		{
+			try
+			{
+				var result = await _natTypeConsistencyKeepingCheckingServer.ReceiveAsync();
+				ProcessNATConsistencyCheckMessage(result.Buffer, result.RemoteEndPoint);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"NAT一致性检查服务器错误: {ex.Message}");
+			}
+		}
+	}
+
+	private void ProcessNATConsistencyCheckMessage(byte[] data, IPEndPoint remoteEndPoint)
+	{
+		try
+		{
+			var messageType = (MessageType)BitConverter.ToInt32(data, 0);
+			if (messageType != MessageType.TURNCheckNATConsistencyRequest)
+			{
+				Console.WriteLine($"收到未知消息类型: {messageType}");
+				return;
+			}
+
+			var clientGuid = new Guid(data.Skip(4).Take(16).ToArray());
+			var clientEndPoint = new IPEndPoint(
+				new IPAddress(data.Skip(20).Take(4).ToArray()),
+				BitConverter.ToInt32(data, 24)
+			);
+
+			Console.WriteLine($"收到NAT一致性检查请求 来自: {clientGuid} 在 {clientEndPoint}");
+
+			// 发送响应
+			var response = new byte[data.Length];
+			Array.Copy(data, response, data.Length);
+			BitConverter.GetBytes((int)MessageType.TURNCheckNATConsistencyResponse).CopyTo(response, 0);
+			_natTypeConsistencyKeepingCheckingServer.Send(response, response.Length, remoteEndPoint);
+
+			Console.WriteLine($"已发送NAT一致性检查响应到: {remoteEndPoint}");
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"处理NAT一致性检查消息时出错: {ex}");
+		}
 	}
 
 	private void ProcessMessage(byte[] data, IPEndPoint remoteEndPoint)

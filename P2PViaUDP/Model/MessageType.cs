@@ -47,4 +47,12 @@ public enum MessageType
 	/// P2P心跳,由客户端发送给客户端,告诉对方自己还活着 双方是直接通信的
 	/// </summary>
 	P2PHeartbeat,
+	/// <summary>
+	/// TURN检查NAT一致性请求
+	/// </summary>
+	TURNCheckNATConsistencyRequest,
+	/// <summary>
+	/// TURN检查NAT一致性响应
+	/// </summary>
+	TURNCheckNATConsistencyResponse
 }

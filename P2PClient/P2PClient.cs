@@ -114,10 +114,17 @@ public class P2PClient
 			try
 			{
 				var result = await _udpClient.ReceiveAsync();
-				var messageType = (MessageType)result.Buffer[0];
+				var messageType = (MessageType)BitConverter.ToInt32(result.Buffer, 0);
 				Console.ForegroundColor = ConsoleColor.Cyan;
 				Console.WriteLine($"从: {result.RemoteEndPoint} 收到消息, 消息类型: {messageType}");
 				Console.ResetColor();
+				
+				// 对于NAT一致性检查响应，不需要进一步处理，TURNClientLogic.CheckNATConsistencyAsync已经处理了
+				if (messageType == MessageType.TURNCheckNATConsistencyResponse)
+				{
+					continue;
+				}
+				
 				_ = Task.Run(() => ProcessReceivedMessageAsync(result.Buffer, result.RemoteEndPoint));
 			}
 			catch (Exception ex)
@@ -140,7 +147,7 @@ public class P2PClient
 
 	private async Task ProcessReceivedMessageAsync(byte[] data, IPEndPoint receiverRemoteEndPoint)
 	{
-		var messageType = (MessageType)data[0];
+		var messageType = (MessageType)BitConverter.ToInt32(data, 0);
 		Console.WriteLine($"消息类型: {messageType}");
 		switch (messageType)
 		{
@@ -167,6 +174,11 @@ public class P2PClient
 				break;
 			case MessageType.P2PHolePunchingResponse:
 				await ProcessP2PHolePunchingResponseMessageAsync(data);
+				break;
+			case MessageType.TURNCheckNATConsistencyRequest:
+			case MessageType.TURNCheckNATConsistencyResponse:
+				// 这两种消息在TURNClientLogic.CheckNATConsistencyAsync中已处理，这里只需记录
+				Console.WriteLine($"收到NAT一致性检查相关消息: {messageType}");
 				break;
 			default:
 				Console.WriteLine($"未知消息类型: {messageType}");
@@ -356,6 +368,24 @@ public class P2PClient
 					Thread.Sleep(300);
 					Console.WriteLine($"已发送第{i}次橄榄枝消息到: {broadcastMessage.ClientSideEndPointToTURN}");
 				}
+				
+				// 抛出橄榄枝后检查NAT一致性
+				if (_myEndPointFromMainStunSecondPortReply != null)
+				{
+					try
+					{
+						await TURNClientLogic.CheckNATConsistencyAsync(
+							_settings,
+							_myEndPointFromMainStunSecondPortReply,
+							_clientId,
+							_udpClient
+						);
+					}
+					catch (Exception ex)
+					{
+						Console.WriteLine($"抛出橄榄枝后NAT一致性检查失败: {ex.Message}");
+					}
+				}
 
 				return;
 			}
@@ -399,6 +429,24 @@ public class P2PClient
 
 			// 处理P2P打洞
 			await SendHolePunchingMessageAsync(holePunchingMessage);
+			
+			// 打洞后检查NAT一致性
+			if (_myEndPointFromMainStunSecondPortReply != null)
+			{
+				try
+				{
+					await TURNClientLogic.CheckNATConsistencyAsync(
+						_settings,
+						_myEndPointFromMainStunSecondPortReply,
+						_clientId,
+						_udpClient
+					);
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine($"打洞后NAT一致性检查失败: {ex.Message}");
+				}
+			}
 		}
 		catch (Exception ex)
 		{
