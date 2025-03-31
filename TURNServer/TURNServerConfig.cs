@@ -24,14 +24,17 @@ public class TURNServerConfig : ConfigBase, IConfig
 	public List<ushort> AdditionalPortsForTURNPrediction { get; private set; } = new();
 	
 	public ushort TURNServerDataTransferPortFor2SymmetricNATClients { get; private set; }
+	/// <summary>
+	/// 用于检测NAT类型一致性的端口
+	/// 当尝试发起打洞或者是抛出橄榄枝后,客户端请求这个端口,TURN得知他的出网地址后告诉客户端.
+	/// 客户端通过这个端口跟之前他自己记录的出网NAT进行对比,看看自己的端口变化了没有,如果变化了,如果端口受限型,那打洞肯定是会失败的
+	/// </summary>
+	public ushort NATTypeConsistencyKeepingCheckingPort { get; private set; }
 	
 	public static TURNServerConfig Default => new()
 	{
 		MainPort = 3749,//注意是3749不是3479
-		AdditionalPortsForTURNPrediction = new List<ushort>
-		{
-			3750,3751,3752,3753,3754,3755,3756,3757,3758,3759//额外10个,一共TURN 默认会有11个端口
-		}, 
+		NATTypeConsistencyKeepingCheckingPort = 3750,
 		TURNServerDataTransferPortFor2SymmetricNATClients = 3888
 	};
 }

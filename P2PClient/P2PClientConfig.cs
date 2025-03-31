@@ -43,14 +43,10 @@ public class P2PClientConfig : ConfigBase, IConfig
 	/// </summary>
 	public ushort TURNServerPrimaryPort { get; set; }
 	/// <summary>
-	/// TURN服务端的额外端口集合,这些端口用于在执行P2P打洞的时候,客户端持续有规律的像TURN发送消息以确认客户端自己的端口变化情况
-	/// 如果端口测算由TURN服务器进行,则不需要从这些地方给客户端返回信息,而是把测算的信息从TURNServerPrimaryPort返回.
-	/// </summary>
-	public List<ushort> TURNServerAdditionalPortsForNATPortPrediction { get; set; } = new();
-	/// <summary>
 	/// 当两个打洞的客户端都是对称型NAT时,客户端们通过这个端口进行数据的传输.也就是中继端口.这个端口流量会是整个系统中最大的.
 	/// </summary>
 	public ushort TURNServerDataTransferPortFor2SymmetricNATClients { get; set; }
+	public ushort NATTypeConsistencyKeepingCheckingPortTURN { get; set; }
 	public static P2PClientConfig Default => new("97.64.24.135", "121.22.36.190", "97.64.24.135")
 	{
 		STUNWitchKindOfConeServerPort = 3478,
@@ -103,8 +99,9 @@ public class P2PClientConfig : ConfigBase, IConfig
 		
 		
 		TURNServerPrimaryPort = 3749,
-		TURNServerAdditionalPortsForNATPortPrediction = 
-			new List<ushort> {3750,3751,3752,3753,3754,3755,3756,3757,3758,3759},//额外10个,一共TURN 默认会有11个端口 
-		TURNServerDataTransferPortFor2SymmetricNATClients = 3888
+		// TURNServerAdditionalPortsForNATPortPrediction = 
+			// new List<ushort> {3750,3751,3752,3753,3754,3755,3756,3757,3758,3759},//额外10个,一共TURN 默认会有11个端口 
+		TURNServerDataTransferPortFor2SymmetricNATClients = 3888,
+		NATTypeConsistencyKeepingCheckingPortTURN = 3750
 	};
 }

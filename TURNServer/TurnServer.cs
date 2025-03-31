@@ -10,6 +10,7 @@ namespace TURNServer;
 public class TurnServer
 {
 	private readonly UdpClient _udpServer;
+	private readonly UdpClient _natTypeConsistencyKeepingCheckingServer;
 	private readonly ConcurrentDictionary<Guid, List<TURNClient>> _groupDict;
 	private readonly TURNServerConfig _settings;
 	private bool _isRunning;
@@ -20,6 +21,7 @@ public class TurnServer
 		_groupDict = new ConcurrentDictionary<Guid, List<TURNClient>>();
 		// 只指定端口，监听所有IP
 		_udpServer = new UdpClient(settings.MainPort);
+		_natTypeConsistencyKeepingCheckingServer = new UdpClient(settings.NATTypeConsistencyKeepingCheckingPort);
 
 		// 添加测试组
 		_groupDict.TryAdd(Guid.Parse("00000000-0000-0000-0000-000000000001"),
