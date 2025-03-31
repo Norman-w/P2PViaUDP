@@ -45,7 +45,7 @@ public class StunNATTypeCheckingRequest
 	/// </summary>
 	public SubCheckingTypeEnum SubCheckingType { get; init; }
 	public Guid ClientId { get; init; }
-	public IPEndPoint ToSTUNServerEndPoint { get; init; }
+	public IPEndPoint ToSTUNServerEndPoint { get; set; }
 	public DateTime SendTime { get; init; }
 	public byte[] ToBytes()
 	{

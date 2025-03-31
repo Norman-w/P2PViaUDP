@@ -21,33 +21,18 @@ public class P2PClientConfig : ConfigBase, IConfig
 	/// 另外,从从服务器后期也会接收到和主服务器一样收到的消息,用于客户端确认自己出网时候的NAT端口变化
 	/// </summary>
 	public string STUNSlaveServerIP { get; set; }
-	/// <summary>
-	/// STUN服务器主端口,用于检测发来的消息是否是有效的,防止被恶意攻击,
-	/// 如果用于主服务器,也用于第一次开始确认自己NAT的时候数据包的发送
-	/// 如果用于从服务器,只是为了检测数据包的安全性
-	/// 客户端->主STUN:这个端口->客户端
-	///			↓
-	///		   从STUN:这个端口->客户端
-	/// </summary>
-	public ushort STUNMainAndSlaveServerPrimaryPort { get; set; }
-	/// <summary>
-	/// NAT类型确认过程中,主服务器除了从主端口外,还会使用这个端口返回数据包,以确认NAT类型的端口限制与否
-	/// 如果客户端收不到这个数据包,则说明相同IP的不同端口返回数据包的限制,也就是,至少是端口限制型NAT(还有可能是对称型NAT)
-	/// 客户端->主STUN:主要端口->客户端
-	///				   ↓
-	///				 这个端口->客户端
-	/// </summary>
-	public ushort STUNMainServerSecondaryPort { get; set; }
-	/// <summary>
-	/// STUN从服务器的备用端口,主要用于检测发来的消息是否是有效的,防止被恶意攻击
-	/// 客户端->主STUN:主端口->客户端
-	///			↓
-	///		  从STUN:这个端口->客户端
-	///
-	///
-	/// 另外也会收到客户端发来的请求,用于客户端确认自己的NAT端口变化情况
-	/// </summary>
-	public ushort STUNSlaveServerSecondaryPort { get; set; }
+	public ushort STUNWitchKindOfConeServerPort { get; set; }
+	
+	public ushort STUNWhichKindOfConeMainServerRequestAndResponsePort { get; set; }
+	public ushort STUNWhichKindOfConeMainServerResponseSecondaryPort { get; set; }
+	public ushort STUNWhichKindOfConeSlaveServerResponsePrimaryPort { get; set; }
+	public ushort STUNWhichKindOfConeSlaveServerResponseSecondaryPort { get; set; }
+	
+	public ushort STUNIsSymmetricMainServerPrimaryPort { get; set; }
+	public ushort STUNIsSymmetricMainServerSecondaryPort { get; set; }
+	public ushort STUNIsSymmetricSlaveServerPrimaryPort { get; set; }
+	public ushort STUNIsSymmetricSlaveServerSecondaryPort { get; set; }
+	
 	
 	/// <summary>
 	/// TURN服务端的IP
@@ -68,9 +53,55 @@ public class P2PClientConfig : ConfigBase, IConfig
 	public ushort TURNServerDataTransferPortFor2SymmetricNATClients { get; set; }
 	public static P2PClientConfig Default => new("97.64.24.135", "121.22.36.190", "97.64.24.135")
 	{
-		STUNMainAndSlaveServerPrimaryPort = 3478,
-		STUNMainServerSecondaryPort = 3479,
-		STUNSlaveServerSecondaryPort = 3480,
+		STUNWitchKindOfConeServerPort = 3478,
+		/*
+		 
+		 #region 用于检测"是否对称型"的端口设置
+
+		   MainServerIsSymmetricRequestAndResponsePrimaryPort = 3482,
+		   MainServerIsSymmetricRequestAndResponseSecondaryPort = 3483,
+		   SlaveServerIsSymmetricRequestAndResponsePrimaryPort = 3484,
+		   SlaveServerIsSymmetricRequestAndResponseSecondaryPort = 3485,
+
+		   #endregion
+		
+		
+		*/
+		STUNIsSymmetricMainServerPrimaryPort = 3482,
+		STUNIsSymmetricMainServerSecondaryPort = 3483,
+		STUNIsSymmetricSlaveServerPrimaryPort = 3484,
+		STUNIsSymmetricSlaveServerSecondaryPort = 3485,
+		
+		
+		/*
+		 
+		 /// <summary>
+		   /// 主服务器用于检测客户端是哪种锥形的网络
+		   /// 服务端收到消息以后除了从这个端口的链接返回,还会转发到自己的哪种锥形监测的另外一个端口以及从服务器的哪种锥形监测的主从端口进行返回
+		   /// 客户端根据收到的响应来确认自己是什么型的网络
+		   /// </summary>
+		   public ushort MainServerWhichKindOfConeRequestAndResponsePort { get; private set; }
+		   /// <summary>
+		   /// 主服务器的用于检测客户端是哪种锥形的网络的应答时使用的次要端口,主服务器接受到检测请求后也会经由这里返回数据给客户端,不接收.
+		   /// </summary>
+		   public ushort MainServerWhichKindOfConeResponseSecondaryPort { get; private set; }
+		   /// <summary>
+		   /// 从服务器用于检测客户端是哪种锥形的网络的主要端口,得到主服务器的透传信号后,用于返回数据给客户端,不接收.
+		   /// </summary>
+		   public ushort SlaveServerWhichKindOfConeResponsePrimaryPort { get; private set; }
+		   /// <summary>
+		   /// 从服务器用于检测客户端是哪种锥形的网络的次要端口,得到主服务器的透传信号后,用于返回数据给客户端,不接收.
+		   /// </summary>
+		   public ushort SlaveServerWhichKindOfConeResponseSecondaryPort { get; private set; }
+		
+		
+		*/
+		STUNWhichKindOfConeMainServerRequestAndResponsePort = 3478,
+		STUNWhichKindOfConeMainServerResponseSecondaryPort = 3479,
+		STUNWhichKindOfConeSlaveServerResponsePrimaryPort = 3480,
+		STUNWhichKindOfConeSlaveServerResponseSecondaryPort = 3481,
+		
+		
 		TURNServerPrimaryPort = 3749,
 		TURNServerAdditionalPortsForNATPortPrediction = 
 			new List<ushort> {3750,3751,3752,3753,3754,3755,3756,3757,3758,3759},//额外10个,一共TURN 默认会有11个端口 

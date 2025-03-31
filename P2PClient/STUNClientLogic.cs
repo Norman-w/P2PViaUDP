@@ -50,14 +50,8 @@ public class STUNClient
 			_settings.STUNMainServerIP = ip[0].ToString();
 		}
 		#endregion
-		
-		var serverEndPoint = new IPEndPoint(
-			IPAddress.Parse(_settings.STUNMainServerIP),
-			_settings.STUNMainAndSlaveServerPrimaryPort
-		);
 
-
-		await ConductWhichKindOfConeNATCheckAsync(serverEndPoint);
+		await ConductWhichKindOfConeNATCheckAsync();
 		if (MyNATType == NATTypeEnum.FullCone)
 		{
 			return;
@@ -74,12 +68,12 @@ public class STUNClient
 		Console.WriteLine($"等待 {delayTimeBetweenTwoRounds} ms,等待第一轮和第二轮之间的停顿");
 		await Task.Delay(delayTimeBetweenTwoRounds);
 		
-		await ConductSymmetricNATCheckAsync(serverEndPoint);
+		await ConductSymmetricNATCheckAsync();
 	}
 
-	private async Task ConductWhichKindOfConeNATCheckAsync(IPEndPoint serverEndPoint)
+	private async Task ConductWhichKindOfConeNATCheckAsync()
 	{
-		
+		var serverEndPoint = new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNWitchKindOfConeServerPort);
 		#region 第一轮测试,先测试是什么锥形,只给主服务器的主端口发送一条消息,看看能从哪些路径回来.
 
 		var whichKindOfConeNATTypeCheckingRequest = new StunNATTypeCheckingRequest(
@@ -136,7 +130,7 @@ public class STUNClient
 		#endregion
 	}
 
-	private async Task ConductSymmetricNATCheckAsync(IPEndPoint serverEndPoint)
+	private async Task ConductSymmetricNATCheckAsync()
 	{
 		_isSymmetricNATTypeCheckingRequestRetriedTimes = 0;
 		while (true)
@@ -152,8 +146,10 @@ public class STUNClient
 			}
 
 			#region 构建STUN请求消息, 先发送是否对称型的检测包
+			var serverEndPoint = new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNIsSymmetricMainServerPrimaryPort);
 
-			var isSymmetricNATTypeCheckingRequest = new StunNATTypeCheckingRequest(Guid.NewGuid(), StunNATTypeCheckingRequest.SubCheckingTypeEnum.IsSymmetric, _clientId, serverEndPoint, DateTime.Now);
+			var isSymmetricNATTypeCheckingRequest = new StunNATTypeCheckingRequest(Guid.NewGuid(),
+				StunNATTypeCheckingRequest.SubCheckingTypeEnum.IsSymmetric, _clientId, serverEndPoint, DateTime.Now);
 
 			#endregion
 
@@ -165,10 +161,9 @@ public class STUNClient
 			_myEndPointFromSlaveStunMainPortReply = null;
 			_myEndPointFromSlaveStunSecondaryPortReply = null;
 
-			var isSymmetricNATTypeCheckingRequestBytes = isSymmetricNATTypeCheckingRequest.ToBytes();
 			// 发送请求
 			Console.WriteLine("开始向所有STUN服务器端口发送请求...");
-			await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequestBytes);
+			await SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(isSymmetricNATTypeCheckingRequest);
 			
 			var receivedCount = 0;
 
@@ -226,13 +221,13 @@ public class STUNClient
 		 如果有4个回信是从主服务器的主端口从端口以及从服务器的主端口从端口的,那就是全锥形的 啥都可以访问的
 		*/
 		var fromMainServerPrimaryPort = responses.FirstOrDefault(r =>
-			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort);
+			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerPrimaryPort);
 		var fromMainServerSecondaryPort = responses.FirstOrDefault(r =>
-			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort);
+			r.IsFromMainSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerSecondaryPort);
 		var fromSlaveServerPrimaryPort = responses.FirstOrDefault(r =>
-			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort);
+			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerPrimaryPort);
 		var fromSlaveServerSecondaryPort = responses.FirstOrDefault(r =>
-			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort);
+			r.IsFromSlaveSTUNServer && r.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerSecondaryPort);
 		Console.WriteLine("以下是 [哪种锥形] 检测从的服务端回访来源信息:");
 		Console.ForegroundColor = ConsoleColor.DarkYellow;
 		if (fromMainServerPrimaryPort != null)
@@ -296,23 +291,23 @@ public class STUNClient
 			$"检测(哪种锥形)收到了来自 {(response.IsFromMainSTUNServer ? "主" : "从")} STUN服务器的{response.StunServerEndPoint.Port} 端口的响应,我的NAT公网信息: {response.DetectedClientNATEndPoint}");
 		if (response.IsFromMainSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeMainServerRequestAndResponsePort)
 			{
 				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
 
-			if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeMainServerResponseSecondaryPort)
 			{
 				MyEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
 		}
 		else if (response.IsFromSlaveSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeSlaveServerResponsePrimaryPort)
 			{
 				_myEndPointFromSlaveStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
-			else if (response.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort)
+			else if (response.StunServerEndPoint.Port == _settings.STUNWhichKindOfConeSlaveServerResponseSecondaryPort)
 			{
 				_myEndPointFromSlaveStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
@@ -329,22 +324,22 @@ public class STUNClient
 		_isSymmetricResponseQueue.Enqueue(response);
 		if (response.IsFromMainSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerPrimaryPort)
 			{
 				_myEndPointFromMainStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
-			else if (response.StunServerEndPoint.Port == _settings.STUNMainServerSecondaryPort)
+			else if (response.StunServerEndPoint.Port == _settings.STUNIsSymmetricMainServerSecondaryPort)
 			{
 				MyEndPointFromMainStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
 		}
 		else if (response.IsFromSlaveSTUNServer)
 		{
-			if (response.StunServerEndPoint.Port == _settings.STUNMainAndSlaveServerPrimaryPort)
+			if (response.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerPrimaryPort)
 			{
 				_myEndPointFromSlaveStunMainPortReply = response.DetectedClientNATEndPoint;
 			}
-			else if (response.StunServerEndPoint.Port == _settings.STUNSlaveServerSecondaryPort)
+			else if (response.StunServerEndPoint.Port == _settings.STUNIsSymmetricSlaveServerSecondaryPort)
 			{
 				_myEndPointFromSlaveStunSecondaryPortReply = response.DetectedClientNATEndPoint;
 			}
@@ -542,25 +537,35 @@ public class STUNClient
 	}
 
 	#endregion
-	private async Task SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(byte[] data)
+	private async Task SendIsSymmetricNATTypeCheckingRequestToAllPortsAsync(StunNATTypeCheckingRequest originalRequest)
 	{
 		try
 		{
 			// 主服务器主端口
-			await _udpClient.SendAsync(data, data.Length, 
-				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainAndSlaveServerPrimaryPort));
+			var bytes1 = originalRequest.ToBytes();
+			await _udpClient.SendAsync(bytes1, bytes1.Length, 
+				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNIsSymmetricMainServerPrimaryPort));
 			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到主服务器主端口");
+			
 			// 主服务器次端口
-			await _udpClient.SendAsync(data, data.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNMainServerSecondaryPort));
+			originalRequest.ToSTUNServerEndPoint = new IPEndPoint(IPAddress.Parse(_settings.STUNMainServerIP), _settings.STUNIsSymmetricMainServerSecondaryPort);
+			var bytes2 = originalRequest.ToBytes();
+			await _udpClient.SendAsync(bytes2, bytes2.Length,
+				originalRequest.ToSTUNServerEndPoint);
 			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到主服务器次端口");
+			
 			// 从服务器主端口
-			await _udpClient.SendAsync(data, data.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNMainAndSlaveServerPrimaryPort));
+			originalRequest.ToSTUNServerEndPoint = new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNIsSymmetricSlaveServerPrimaryPort);
+			var bytes3 = originalRequest.ToBytes();
+			await _udpClient.SendAsync(bytes3, bytes3.Length,
+				originalRequest.ToSTUNServerEndPoint);
 			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到从服务器主端口");
+			
 			// 从服务器次端口
-			await _udpClient.SendAsync(data, data.Length,
-				new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNSlaveServerSecondaryPort));
+			originalRequest.ToSTUNServerEndPoint = new IPEndPoint(IPAddress.Parse(_settings.STUNSlaveServerIP), _settings.STUNIsSymmetricSlaveServerSecondaryPort);
+			var bytes4 = originalRequest.ToBytes();
+			await _udpClient.SendAsync(bytes4, bytes4.Length,
+				originalRequest.ToSTUNServerEndPoint);
 			
 
 			Console.WriteLine("已发送 [是否对称型NAT] 检测请求到所有端口");
