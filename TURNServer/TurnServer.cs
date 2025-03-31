@@ -44,11 +44,11 @@ public class TurnServer
 		// 启动两个接收任务
 		var mainTask = Task.Run(ReceiveMainServerMessagesAsync);
 		var natCheckTask = Task.Run(ReceiveNATConsistencyCheckMessagesAsync);
-		
+
 		// 等待任务完成（实际上这两个任务应该不会自然结束，除非抛出异常或主动停止）
 		var tasks = new[] { mainTask, natCheckTask };
 		await Task.WhenAll(tasks);
-		
+
 		// 添加额外的阻塞机制，防止服务器退出
 		Console.WriteLine("服务器已启动，按任意键停止服务...");
 		Console.ReadKey();
@@ -97,19 +97,18 @@ public class TurnServer
 				return;
 			}
 
-			var clientGuid = new Guid(data.Skip(4).Take(16).ToArray());
-			var clientEndPoint = new IPEndPoint(
-				new IPAddress(data.Skip(20).Take(4).ToArray()),
-				BitConverter.ToInt32(data, 24)
-			);
+			var request = TURNCheckNATConsistencyRequest.FromBytes(data);
 
-			Console.WriteLine($"收到NAT一致性检查请求 来自: {clientGuid} 在 {clientEndPoint}");
+			Console.WriteLine($"收到NAT一致性检查请求 来自: {remoteEndPoint}");
 
 			// 发送响应
-			var response = new byte[data.Length];
-			Array.Copy(data, response, data.Length);
-			BitConverter.GetBytes((int)MessageType.TURNCheckNATConsistencyResponse).CopyTo(response, 0);
-			_natTypeConsistencyKeepingCheckingServer.Send(response, response.Length, remoteEndPoint);
+			var response = new TURNCheckNATConsistencyResponse
+			{
+				ClientId = request.ClientId,
+				EndPoint = remoteEndPoint
+			};
+			var bytes = response.ToBytes();
+			_natTypeConsistencyKeepingCheckingServer.Send(bytes, bytes.Length, remoteEndPoint);
 
 			Console.WriteLine($"已发送NAT一致性检查响应到: {remoteEndPoint}");
 		}
@@ -156,15 +155,15 @@ public class TurnServer
 	private void BroadcastToGroup(TURNRegisterMessage newClient, List<TURNClient> group)
 	{
 		/*
-		 
-		 
-		 1 2 3 4 5 6 
+
+
+		 1 2 3 4 5 6
 		 当前的是6, 循环到1的时候,1是早期加入的客户端,6是最新加入的客户端
 		 向1发送6新加入的消息,向2发送6新加入的消息,向3发送6新加入的消息,向4发送6新加入的消息,向5发送6新加入的消息
 		 向6发送1早期加入的消息,向6发送2早期加入的消息,向6发送3早期加入的消息,向6发送4早期加入的消息,向6发送5早期加入的消息
-		
-		
-		
+
+
+
 */
 		Console.WriteLine($"向组内其他早期已经存在的客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
 		var thisNewClient = group.First(c => c.Guid == newClient.Guid);
@@ -185,6 +184,7 @@ public class TurnServer
 					Console.ResetColor();
 					continue;
 				}
+
 				var broadcast = new TURNBroadcastMessage
 				{
 					ClientSideEndPointToTURN = thisNewClient.EndPointFromTURN,
@@ -197,13 +197,15 @@ public class TurnServer
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
-				Console.WriteLine($"广播已发送到 {existInGroupEarlierClient.Guid} 经由 {existInGroupEarlierClient.EndPointFromTURN}");
+				Console.WriteLine(
+					$"广播已发送到 {existInGroupEarlierClient.Guid} 经由 {existInGroupEarlierClient.EndPointFromTURN}");
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine($"广播失败: {ex.Message}");
 			}
 		}
+
 		// 向这个新的客户端发送其他客户端的信息
 		Console.WriteLine($"向新客户端 {thisNewClient.Guid} 发送其他客户端信息, 共 {groupOtherClientsWithoutThisNewClient.Count} 个");
 		foreach (var existInGroupEarlierClient in groupOtherClientsWithoutThisNewClient)
@@ -222,15 +224,18 @@ public class TurnServer
 					Console.ResetColor();
 					continue;
 				}
-				
+
 				var isNeedPrepareAcceptIncomingConnectionForThisClient = active == thisNewClient;
-				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = !isNeedPrepareAcceptIncomingConnectionForThisClient;
+				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient =
+					!isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
 					ClientSideEndPointToTURN = existInGroupEarlierClient.EndPointFromTURN,
 					Guid = existInGroupEarlierClient.Guid,
-					IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
-					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
+					IsNeedPrepareAcceptIncomingConnectionForThisClient =
+						isNeedPrepareAcceptIncomingConnectionForThisClient,
+					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient =
+						isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 					GroupGuid = newClient.GroupGuid,
 					IsNeedHolePunchingToThisClient = true,
 					IsFullConeDetected = existInGroupEarlierClient.NATType == NATTypeEnum.FullCone
@@ -263,7 +268,7 @@ public class TurnServer
 		out string errorMessage)
 	{
 		TURNClient? fullConePair = null, fullConePairAnOther = null;
-		TURNClient? restrictedConePair = null , restrictedConePairAnOther = null;
+		TURNClient? restrictedConePair = null, restrictedConePairAnOther = null;
 		TURNClient? portRestrictedConePair = null, portRestrictedConePairAnOther = null;
 		TURNClient? symmetricPair = null, symmetricPairAnOther = null;
 		switch (laterPair.NATType)
@@ -293,7 +298,7 @@ public class TurnServer
 				Console.WriteLine($"未知的NAT类型: 先加入的客户端 {earlierPair.NATType}, 后加入的客户端 {laterPair.NATType}");
 				break;
 			case NATTypeEnum.FullCone:
-				if(fullConePair != null)
+				if (fullConePair != null)
 				{
 					fullConePairAnOther = earlierPair;
 				}
@@ -301,9 +306,10 @@ public class TurnServer
 				{
 					fullConePair = earlierPair;
 				}
+
 				break;
 			case NATTypeEnum.RestrictedCone:
-				if(restrictedConePair != null)
+				if (restrictedConePair != null)
 				{
 					restrictedConePairAnOther = earlierPair;
 				}
@@ -311,9 +317,10 @@ public class TurnServer
 				{
 					restrictedConePair = earlierPair;
 				}
+
 				break;
 			case NATTypeEnum.PortRestrictedCone:
-				if(portRestrictedConePair != null)
+				if (portRestrictedConePair != null)
 				{
 					portRestrictedConePairAnOther = earlierPair;
 				}
@@ -321,9 +328,10 @@ public class TurnServer
 				{
 					portRestrictedConePair = earlierPair;
 				}
+
 				break;
 			case NATTypeEnum.Symmetric:
-				if(symmetricPair != null)
+				if (symmetricPair != null)
 				{
 					symmetricPairAnOther = earlierPair;
 				}
@@ -331,10 +339,12 @@ public class TurnServer
 				{
 					symmetricPair = earlierPair;
 				}
+
 				break;
 			default:
 				throw new ArgumentOutOfRangeException($"在决定主动和被动时出现了未知的NAT类型: {earlierPair.NATType}");
 		}
+
 		if (fullConePair != null && fullConePairAnOther != null)
 		{
 			// 全锥形 <-> 全锥形
@@ -352,6 +362,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (fullConePair != null && portRestrictedConePair != null)
 		{
 			// 全锥形 <-> 端口受限
@@ -360,6 +371,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (fullConePair != null && symmetricPair != null)
 		{
 			// 全锥形 <-> 对称形
@@ -368,6 +380,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (restrictedConePair != null && restrictedConePairAnOther != null)
 		{
 			// IP受限 <-> IP受限
@@ -376,6 +389,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (restrictedConePair != null && portRestrictedConePair != null)
 		{
 			// IP受限 <-> 端口受限
@@ -384,6 +398,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (restrictedConePair != null && symmetricPair != null)
 		{
 			// IP受限 <-> 对称形
@@ -392,6 +407,7 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (portRestrictedConePair != null && portRestrictedConePairAnOther != null)
 		{
 			// 端口受限 <-> 端口受限
@@ -400,15 +416,18 @@ public class TurnServer
 			errorMessage = string.Empty;
 			return true;
 		}
+
 		if (portRestrictedConePair != null && symmetricPair != null)
 		{
 			// 端口受限 <-> 对称形
 			active = null;
 			passive = null;
-			errorMessage = "端口受限型和对称形之间的打洞, 没有办法进行,因为虽然端口受限型的端口虽然不会变化,但是必须要端口受限型先发送链接到对方(确切的端口)然后对方才能通过这个端口返回数据,但是对称型的端口一般又没法预测,随机性很高,所以没法打洞)";
+			errorMessage =
+				"端口受限型和对称形之间的打洞, 没有办法进行,因为虽然端口受限型的端口虽然不会变化,但是必须要端口受限型先发送链接到对方(确切的端口)然后对方才能通过这个端口返回数据,但是对称型的端口一般又没法预测,随机性很高,所以没法打洞)";
 			Console.WriteLine(errorMessage);
 			return false;
 		}
+
 		if (symmetricPair != null && symmetricPairAnOther != null)
 		{
 			// 对称形 <-> 对称形

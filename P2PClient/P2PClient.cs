@@ -368,7 +368,6 @@ public class P2PClient
 					{
 						await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
 							_settings,
-							_myEndPointFromMainStunSecondPortReply,
 							_clientId,
 							_udpClient
 						);
@@ -429,7 +428,6 @@ public class P2PClient
 				{
 					await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
 						_settings,
-						_myEndPointFromMainStunSecondPortReply,
 						_clientId,
 						_udpClient
 					);

@@ -62,13 +62,13 @@ public static class TURNClientLogic
 
 	#region 检查NAT一致性
 
-	public static async Task SendCheckNATConsistencyRequestAsync(P2PClientConfig settings, IPEndPoint myEndPoint, Guid clientId, UdpClient udpClient)
+	public static async Task SendCheckNATConsistencyRequestAsync(P2PClientConfig settings, Guid clientId, UdpClient udpClient)
 	{
 		try
 		{
 			var checkMessage = new TURNCheckNATConsistencyRequest
 			{
-				ClientId = clientId,
+				ClientId = clientId
 			};
 
 			var turnServerEndPoint = new IPEndPoint(
@@ -77,7 +77,6 @@ public static class TURNClientLogic
 			);
 
 			Console.WriteLine($"正在检查NAT一致性: {turnServerEndPoint}");
-			Console.WriteLine($"本地终端点: {myEndPoint}");
 
 			var messageBytes = checkMessage.ToBytes();
 			await udpClient.SendAsync(messageBytes, messageBytes.Length, turnServerEndPoint);

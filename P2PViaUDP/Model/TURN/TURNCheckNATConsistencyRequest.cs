@@ -5,7 +5,7 @@ public class TURNCheckNATConsistencyRequest
     private static MessageType MessageType => MessageType.TURNCheckNATConsistencyRequest;
 
     private static uint DefaultMessageLength => 4 + // MessageType
-                                                16; // Guid
+        16; // Guid
 
     public Guid ClientId { get; init; }
 
@@ -26,7 +26,7 @@ public class TURNCheckNATConsistencyRequest
 
         return new TURNCheckNATConsistencyRequest
         {
-            ClientId = clientId,
+            ClientId = clientId
         };
     }
 
