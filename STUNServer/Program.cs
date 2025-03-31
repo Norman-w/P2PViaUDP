@@ -115,13 +115,18 @@ switch (isSlaveServer)
 		return;
 	case true:
 		slaveServerWhichKindOfConeByPassReceiver.BeginReceive(ReceiveByPassWhichKindOfConeRequestFromMainStunServerCallback, slaveServerWhichKindOfConeByPassReceiver);
-		slaveServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricPrimaryServer);
-		slaveServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback, slaveServerIsSymmetricSecondaryServer);
+		slaveServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback,
+			(slaveServerIsSymmetricRequestAndResponsePrimaryPort, slaveServerIsSymmetricPrimaryServer));
+		slaveServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback,
+			(slaveServerIsSymmetricRequestAndResponseSecondaryPort, slaveServerIsSymmetricSecondaryServer));
 		break;
 	case false:
-		mainServerWhichKindOfConeServer.BeginReceive(ReceiveCallback, mainServerWhichKindOfConeServer);
-		mainServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, mainServerIsSymmetricPrimaryServer);
-		mainServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback, mainServerIsSymmetricSecondaryServer);
+		mainServerWhichKindOfConeServer.BeginReceive(ReceiveCallback, 
+			(mainServerWhichKindOfConeRequestAndResponsePort, mainServerWhichKindOfConeServer));
+		mainServerIsSymmetricPrimaryServer.BeginReceive(ReceiveCallback, 
+			(mainServerIsSymmetricRequestAndResponsePrimaryPort, mainServerIsSymmetricPrimaryServer));
+		mainServerIsSymmetricSecondaryServer.BeginReceive(ReceiveCallback,
+			(mainServerIsSymmetricRequestAndResponseSecondaryPort, mainServerIsSymmetricSecondaryServer));
 		break;
 }
 
