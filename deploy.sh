@@ -64,7 +64,7 @@ sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "if lsof -i ud
     # 使用lsof命令查找占用UDP端口的进程
     pid=\$(lsof -ti udp:${PORT})
     if [ ! -z \"\$pid\" ]; then
-        echo '正在停止进程 \$pid...'
+        echo '正在停止进程 \$pid ...'
         # 使用kill -9强制终止进程
         kill -9 \$pid 2>/dev/null || true
         sleep 2
