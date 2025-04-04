@@ -65,6 +65,7 @@ public class P2PClient
 
 		try
 		{
+			await LogMyNetWorkInfoAsync();
 			//发送给Localhost:65535一条消息,为了让udpClient进入到bind状态
 			// await _udpClient.SendAsync(new byte[] { 0 }, 1, new IPEndPoint(IPAddress.Any, 0));
 			// 持续监听
@@ -93,6 +94,28 @@ public class P2PClient
 		catch (Exception ex)
 		{
 			Console.WriteLine($"发生错误: {ex.Message}");
+		}
+	}
+
+	private async Task LogMyNetWorkInfoAsync()
+	{
+		//获取自己的所有IP地址 IPv4
+		var host = await Dns.GetHostEntryAsync(Dns.GetHostName());
+		foreach (var ip in host.AddressList)
+		{
+			if (ip.AddressFamily == AddressFamily.InterNetwork)
+			{
+				Console.WriteLine($"本机IPv4地址: {ip} , 地址类型: {ip.AddressFamily}, 是否环回: {ip.IsIPv4MappedToIPv6}");
+			}
+		}
+		
+		//获取本机所有的IP地址 IPv6
+		foreach (var ip in host.AddressList)
+		{
+			if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+			{
+				Console.WriteLine($"本机IPv6地址: {ip} 类型: {ip.AddressFamily}环回?:{ip.IsIPv6LinkLocal}本地?: {ip.IsIPv6SiteLocal},临时?: {ip.IsIPv6Teredo},本地回环?: {ip.IsIPv6Multicast} ");
+			}
 		}
 	}
 
@@ -358,7 +381,7 @@ public class P2PClient
 					await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
 						broadcastMessage.ClientSideEndPointToTURN);
 					Thread.Sleep(300);
-					Console.WriteLine($"已发送第{i}次橄榄枝消息到: {broadcastMessage.ClientSideEndPointToTURN}");
+					Console.WriteLine($"已发送第{i}次橄榄枝消息 从: {_myEndPointFromMainStunSecondPortReply} 到: {broadcastMessage.ClientSideEndPointToTURN}");
 				}
 				
 				// 抛出橄榄枝后检查NAT一致性
