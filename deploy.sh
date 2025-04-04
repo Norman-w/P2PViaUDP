@@ -4,11 +4,19 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 服务器信息
 SERVER="root@norman.wang"
 REMOTE_DIR="/opt/P2PViaUdp"
+REMOTE_SCRIPT="server_deploy.sh"
+
+# 检查server_deploy.sh是否存在
+if [ ! -f "$REMOTE_SCRIPT" ]; then
+    echo -e "${RED}错误: 服务器端脚本 $REMOTE_SCRIPT 不存在${NC}"
+    exit 1
+fi
 
 # 检查sshpass
 if ! command -v sshpass &> /dev/null; then
@@ -35,15 +43,13 @@ echo "1) STUNServer"
 echo "2) TURNServer"
 read -p "请输入选项 (1-2): " choice
 
-# 设置服务名称和端口
+# 设置服务名称
 case $choice in
     1)
         SERVICE_NAME="STUNServer"
-        PORT=3478
         ;;
     2)
         SERVICE_NAME="TURNServer"
-        PORT=3749
         ;;
     *)
         echo -e "${RED}无效的选项${NC}"
@@ -57,59 +63,56 @@ if [ ! -d "$SERVICE_NAME" ]; then
     exit 1
 fi
 
-# 在服务器端检查端口占用并停止进程
-echo -e "${YELLOW}检查服务器端口 $PORT 是否被占用...${NC}"
-# 将相关部分的单引号改为双引号
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "if lsof -i udp:${PORT} > /dev/null 2>&1; then
-    echo \"端口 ${PORT} 被占用，正在停止相关进程...\"
-    pid=\$(lsof -ti udp:${PORT})
-    if [ ! -z \"\$pid\" ]; then
-        echo \"正在停止进程 \$pid ...\"
-        kill -9 \$pid 2>/dev/null || true
-        sleep 2
-        if lsof -i udp:${PORT} > /dev/null 2>&1; then
-            echo \"无法停止占用端口的进程，请手动检查\"
-            exit 1
-        else
-            echo \"成功停止占用端口的进程\"
-        fi
-    else
-        echo \"无法找到占用端口的进程，请手动检查\"
-        exit 1
-    fi
-else
-    echo \"端口 ${PORT} 未被占用\"
-fi"
+# 创建临时目录
+TEMP_DIR=$(mktemp -d)
+echo -e "${YELLOW}创建临时打包目录: $TEMP_DIR${NC}"
 
-# 创建远程目录
-echo -e "${YELLOW}创建远程目录...${NC}"
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p $REMOTE_DIR/$SERVICE_NAME"
+# 打包服务项目和P2PViaUDP项目
+echo -e "${YELLOW}打包项目文件...${NC}"
+mkdir -p $TEMP_DIR/$SERVICE_NAME
+mkdir -p $TEMP_DIR/P2PViaUDP
 
-# 复制P2PViaUDP项目（如果存在）
+# 复制服务项目文件(排除bin和obj)
+echo -e "${YELLOW}复制$SERVICE_NAME项目文件...${NC}"
+rsync -a --exclude 'bin/' --exclude 'obj/' --exclude '.vs/' --exclude '.git/' $SERVICE_NAME/ $TEMP_DIR/$SERVICE_NAME/
+
+# 复制P2PViaUDP项目文件(如果存在)
 if [ -d "P2PViaUDP" ]; then
-    echo -e "${YELLOW}复制P2PViaUDP项目...${NC}"
-    sshpass -p "$SERVER_PASS" rsync -avz --progress \
-        --exclude 'bin/' \
-        --exclude 'obj/' \
-        --exclude '.vs/' \
-        --exclude '.git/' \
-        P2PViaUDP/ \
-        $SERVER:$REMOTE_DIR/P2PViaUDP/
+    echo -e "${YELLOW}复制P2PViaUDP项目文件...${NC}"
+    rsync -a --exclude 'bin/' --exclude 'obj/' --exclude '.vs/' --exclude '.git/' P2PViaUDP/ $TEMP_DIR/P2PViaUDP/
 fi
 
-# 复制服务项目
-echo -e "${YELLOW}复制$SERVICE_NAME 项目...${NC}"
-sshpass -p "$SERVER_PASS" rsync -avz --progress \
-    --exclude 'bin/' \
-    --exclude 'obj/' \
-    --exclude '.vs/' \
-    --exclude '.git/' \
-    $SERVICE_NAME/ \
-    $SERVER:$REMOTE_DIR/$SERVICE_NAME/
+# 复制服务器部署脚本
+cp $REMOTE_SCRIPT $TEMP_DIR/
 
-# 启动应用
-echo -e "${YELLOW}正在启动应用...${NC}"
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "cd $REMOTE_DIR/$SERVICE_NAME && dotnet run"
+# 打包所有文件
+echo -e "${YELLOW}打包所有文件...${NC}"
+cd $TEMP_DIR
+tar -czf p2p_deploy.tar.gz $SERVICE_NAME P2PViaUDP $REMOTE_SCRIPT
+
+# 显示文件大小
+FILESIZE=$(du -h p2p_deploy.tar.gz | cut -f1)
+echo -e "${YELLOW}打包完成，文件大小: ${FILESIZE}${NC}"
+
+# 上传压缩包到服务器
+echo -e "${YELLOW}上传文件到服务器...${NC}"
+sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p $REMOTE_DIR"
+sshpass -p "$SERVER_PASS" rsync -avz --progress --stats $TEMP_DIR/p2p_deploy.tar.gz $SERVER:$REMOTE_DIR/
+
+# 在本地完成后显示分割线
+echo -e "\n${BLUE}=========================================================${NC}"
+echo -e "${BLUE}============== 本地操作完成，开始远程部署 ==============${NC}"
+echo -e "${BLUE}=========================================================${NC}\n"
+
+# 在服务器上触发服务器端脚本
+echo -e "${YELLOW}在服务器上启动部署...${NC}"
+sshpass -p "$SERVER_PASS" ssh -t -o StrictHostKeyChecking=no $SERVER "cd $REMOTE_DIR && tar -xzf p2p_deploy.tar.gz && bash $REMOTE_SCRIPT $SERVICE_NAME && rm -f p2p_deploy.tar.gz"
+
+# 清理临时文件
+echo -e "${YELLOW}清理本地临时文件...${NC}"
+rm -rf $TEMP_DIR
 
 # 清除密码变量
-unset SERVER_PASS 
+unset SERVER_PASS
+
+echo -e "${GREEN}部署完成${NC}"
