@@ -108,13 +108,14 @@ public class P2PClient
 				Console.WriteLine($"本机IPv4地址: {ip} , 地址类型: {ip.AddressFamily}, 是否环回: {ip.IsIPv4MappedToIPv6}");
 			}
 		}
-		
+
 		//获取本机所有的IP地址 IPv6
 		foreach (var ip in host.AddressList)
 		{
 			if (ip.AddressFamily == AddressFamily.InterNetworkV6)
 			{
-				Console.WriteLine($"本机IPv6地址: {ip} 类型: {ip.AddressFamily}环回?:{ip.IsIPv6LinkLocal}本地?: {ip.IsIPv6SiteLocal},临时?: {ip.IsIPv6Teredo},本地回环?: {ip.IsIPv6Multicast} ");
+				Console.WriteLine(
+					$"本机IPv6地址: {ip} 类型: {ip.AddressFamily}环回?:{ip.IsIPv6LinkLocal}本地?: {ip.IsIPv6SiteLocal},临时?: {ip.IsIPv6Teredo},本地回环?: {ip.IsIPv6Multicast} ");
 			}
 		}
 	}
@@ -194,6 +195,23 @@ public class P2PClient
 			case MessageType.TURNCheckNATConsistencyRequest:
 			case MessageType.TURNCheckNATConsistencyResponse:
 				TURNClientLogic.ProcessNATConsistencyResponseMessageAsync(data, _myEndPointFromMainStunSecondPortReply);
+				break;
+			case MessageType.Client2ClientIamReadyToReceiveYourHolePunching:
+				// 处理抛橄榄枝消息
+				var oliveBranchMessage = Client2ClientIamReadyToReceiveYourHolePunchingMessage.FromBytes(data);
+				Console.WriteLine($"收到抛橄榄枝消息: {oliveBranchMessage}");
+				// 更新对方的实际通讯地址
+				if (_peerClients.TryGetValue(oliveBranchMessage.SenderId, out var peer))
+				{
+					if (oliveBranchMessage.SenderEndPointFromReceiverWhenReceiveThisMessage != null)
+						peer.EndPoint = oliveBranchMessage.SenderEndPointFromReceiverWhenReceiveThisMessage;
+					Console.WriteLine($"更新对方({oliveBranchMessage.SenderId})的实际通讯地址: {peer.EndPoint}");
+				}
+				else
+				{
+					Console.WriteLine($"未找到对方({oliveBranchMessage.SenderId})的信息");
+				}
+
 				break;
 			default:
 				Console.WriteLine($"未知消息类型: {messageType}");
@@ -305,7 +323,9 @@ public class P2PClient
 
 			#region 因为我已经收到他的打洞消息请求了,所以他就是能发消息给我,我只需要按照他原来的路径给它开一个线程持续发送心跳就行保活就可以了
 
+			Console.ForegroundColor = ConsoleColor.Magenta;
 			Console.WriteLine($"我是打洞的被动方,我已经给他发送了打洞响应消息: {holePunchingResponseMessage},下面开始给他发送心跳包");
+			Console.ResetColor();
 			Thread.Sleep(200);
 			// 然后我开启一个新的线程去给他发送我的心跳包给他
 			ContinuousSendP2PHeartbeatMessagesAsync(receiverRemoteEndPoint);
@@ -332,11 +352,22 @@ public class P2PClient
 		{
 			// 从字节数组中解析P2P打洞响应消息
 			var holePunchingResponseMessage = Client2ClientP2PHolePunchingResponseMessage.FromBytes(data);
+			// 如果跟我打洞的这个客户端我们已经有peer的有效连接了 则忽略这个打洞响应即可
+			if (_peerClients.Any(
+				    x => x.Key == holePunchingResponseMessage.PassiveClientId
+				         && x.Value.EndPoint.Equals(holePunchingResponseMessage.PassiveClientEndPoint)
+				         && x.Value.IsP2PHasBeenEstablished))
+			{
+				Console.WriteLine($"对方({holePunchingResponseMessage.PassiveClientId})已经跟我创建连接了,不需要再发送打洞响应消息了");
+				return Task.CompletedTask;
+			}
 			// 我是主动方,所以我发出去了打洞消息,才有响应消息
 			Console.WriteLine(
 				$"收到P2P打洞响应消息: {holePunchingResponseMessage}, 我实际打洞后跟他通讯的地址是: {holePunchingResponseMessage.ActiveClientEndPoint}, 他实际打洞后跟我通讯的地址是: {holePunchingResponseMessage.PassiveClientEndPoint}");
 
+			Console.ForegroundColor = ConsoleColor.Magenta;
 			Console.WriteLine($"我是主动方,我之前已经发送过打洞请求,这是他给我的回应,所以我们已经打通了,下面开始给他发送心跳包");
+			Console.ResetColor();
 			// 然后我开启一个新的线程去给她发送我的心跳包给他
 			ContinuousSendP2PHeartbeatMessagesAsync(holePunchingResponseMessage.PassiveClientEndPoint);
 		}
@@ -367,83 +398,19 @@ public class P2PClient
 				return;
 			}
 
-			#region 如果广播说我需要给他先抛橄榄枝,那我就先抛橄榄枝
-
 			var needPrepareAcceptIncomingConnectionForThisClient =
 				broadcastMessage.IsNeedPrepareAcceptIncomingConnectionForThisClient;
 			if (needPrepareAcceptIncomingConnectionForThisClient)
 			{
-				Console.WriteLine($"收到广播消息,需要我先抛橄榄枝给对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
-				for (var i = 1; i <= 10; i++)
-				{
-					var oliveBranchMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P OLIVE BRANCH {i}");
-					var oliveBranchBytes = oliveBranchMessage.ToBytes();
-					await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
-						broadcastMessage.ClientSideEndPointToTURN);
-					Thread.Sleep(300);
-					Console.WriteLine($"已发送第{i}次橄榄枝消息 从: {_myEndPointFromMainStunSecondPortReply} 到: {broadcastMessage.ClientSideEndPointToTURN}");
-				}
-				
-				// 抛出橄榄枝后检查NAT一致性
-				if (_myEndPointFromMainStunSecondPortReply != null)
-				{
-					try
-					{
-						await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
-							_settings,
-							_clientId,
-							_udpClient
-						);
-					}
-					catch (Exception ex)
-					{
-						Console.WriteLine($"抛出橄榄枝后NAT一致性检查失败: {ex.Message}");
-					}
-				}
-
-				return;
-			}
-
-			#endregion
-
-			#region 如果广播说我要先等他抛橄榄枝,那我需要等待一段时间再打洞
-
-			var needWaitForPrepareAcceptIncomingConnectionForThisClient =
-				broadcastMessage.IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient;
-			if (needWaitForPrepareAcceptIncomingConnectionForThisClient)
-			{
-				Console.WriteLine($"收到广播消息,需要我等待对方({broadcastMessage.ClientSideEndPointToTURN})抛橄榄枝到我的地址: {_myEndPointFromMainStunSecondPortReply}");
-				await Task.Delay(2222);
-				Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
-			}
-
-			#endregion
-
-			var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
-			{
-				SourceEndPoint = _myEndPointFromMainStunSecondPortReply,
-				DestinationEndPoint = broadcastMessage.ClientSideEndPointToTURN,
-				DestinationClientId = broadcastMessage.Guid,
-				SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
-			};
-
-			//加入到对方的PeerClient集合
-			if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
-			{
-				_peerClients.Add(broadcastMessage.Guid, new PeerClient(broadcastMessage.ClientSideEndPointToTURN)
-				{
-					Guid = broadcastMessage.Guid
-				});
-				Console.WriteLine($"新的PeerClient已加入: {broadcastMessage.Guid}");
+				await PrepareAcceptIncomingConnectionForClientAsync(broadcastMessage);
 			}
 			else
 			{
-				peer.EndPoint = broadcastMessage.ClientSideEndPointToTURN;
+				await HolePunchingToClientAsync(broadcastMessage);
 			}
-
-			// 处理P2P打洞
-			await SendHolePunchingMessageAsync(holePunchingMessage);
 			
+			#region 如果广播说我要先等他抛橄榄枝,那我需要等待一段时间再打洞
+
 			// 打洞后检查NAT一致性
 			if (_myEndPointFromMainStunSecondPortReply != null)
 			{
@@ -468,6 +435,85 @@ public class P2PClient
 		}
 	}
 
+	private async Task HolePunchingToClientAsync(TURNBroadcastMessage broadcastMessage)
+	{
+		Console.WriteLine(
+			$"收到广播消息,需要我等待对方({broadcastMessage.ClientSideEndPointToTURN})抛橄榄枝到我的地址: {_myEndPointFromMainStunSecondPortReply}");
+		await Task.Delay(2222);
+		Console.WriteLine($"等待对方抛橄榄枝结束,开始打洞到对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
+
+		#endregion
+
+		var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
+		{
+			SourceEndPoint = _myEndPointFromMainStunSecondPortReply!,
+			DestinationEndPoint = broadcastMessage.ClientSideEndPointToTURN,
+			DestinationClientId = broadcastMessage.Guid,
+			SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
+		};
+
+		//加入到PeerClient集合中
+		if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
+		{
+			_peerClients.Add(broadcastMessage.Guid, new PeerClient(holePunchingMessage.DestinationEndPoint)
+			{
+				Guid = broadcastMessage.Guid
+			});
+			Console.WriteLine($"新的PeerClient已加入: {broadcastMessage.Guid}");
+		}
+		else
+		{
+			peer.EndPoint = holePunchingMessage.DestinationEndPoint;
+		}
+
+		// 处理P2P打洞
+		await SendHolePunchingMessageAsync(holePunchingMessage);
+	}
+
+	private async Task PrepareAcceptIncomingConnectionForClientAsync(TURNBroadcastMessage broadcastMessage)
+	{
+		Console.WriteLine($"收到广播消息,需要我先抛橄榄枝给对方地址: {broadcastMessage.ClientSideEndPointToTURN}");
+		for (var i = 1; i <= 2; i++)
+		{
+			//检查一下这个客户端是不是已经跟我创建连接了.如果创建了,则退出
+			if (_peerClients.Any(
+				    x => x.Key == broadcastMessage.Guid
+				         && x.Value.EndPoint.Equals(broadcastMessage.ClientSideEndPointToTURN)
+				         && x.Value.IsP2PHasBeenEstablished))
+			{
+				Console.WriteLine($"对方({broadcastMessage.Guid})已经跟我创建连接了,不需要再抛橄榄枝了");
+				break;
+			}
+
+			var oliveBranchMessage =
+				new Client2ClientIamReadyToReceiveYourHolePunchingMessage(_clientId,
+					_myEndPointFromMainStunSecondPortReply!);
+			var oliveBranchBytes = oliveBranchMessage.ToBytes();
+			await _udpClient.SendAsync(oliveBranchBytes, oliveBranchBytes.Length,
+				broadcastMessage.ClientSideEndPointToTURN);
+			Thread.Sleep(1000);
+			Console.WriteLine(
+				$"已发送第{i}次橄榄枝消息 从: {_myEndPointFromMainStunSecondPortReply} 到: {broadcastMessage.ClientSideEndPointToTURN}");
+		}
+
+		// 抛出橄榄枝后检查NAT一致性
+		if (_myEndPointFromMainStunSecondPortReply != null)
+		{
+			try
+			{
+				await TURNClientLogic.SendCheckNATConsistencyRequestAsync(
+					_settings,
+					_clientId,
+					_udpClient
+				);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"抛出橄榄枝后NAT一致性检查失败: {ex.Message}");
+			}
+		}
+	}
+
 	#endregion
 
 	#endregion
@@ -482,7 +528,7 @@ public class P2PClient
 	{
 		Task.Run(async () =>
 		{
-			Console.WriteLine("开始发送P2P打洞消息");
+			Console.WriteLine("开始发送心跳包");
 			var sentTimes = 0;
 			while (_isRunning)
 			{
@@ -511,13 +557,23 @@ public class P2PClient
 
 	private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
 	{
-		const int maxRetries = 5;
+		const int maxRetries = 1;
 		const int retryDelay = 300;
 
 		for (var i = 0; i < maxRetries; i++)
 		{
 			try
 			{
+				//检查一下这个客户端是不是已经跟我创建连接了.如果创建了,则退出
+				if (_peerClients.Any(
+					    x => x.Key == message.DestinationClientId
+					         && x.Value.EndPoint.Equals(message.DestinationEndPoint)
+					         && x.Value.IsP2PHasBeenEstablished))
+				{
+					Console.WriteLine($"对方({message.DestinationClientId})已经跟我创建连接了,不需要再发送打洞消息了");
+					break;
+				}
+
 				var messageBytes = message.ToBytes();
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
 				Console.WriteLine($"P2P打洞消息已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");

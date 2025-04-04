@@ -54,5 +54,6 @@ public enum MessageType
 	/// <summary>
 	/// TURN检查NAT一致性响应
 	/// </summary>
-	TURNCheckNATConsistencyResponse
+	TURNCheckNATConsistencyResponse,
+	Client2ClientIamReadyToReceiveYourHolePunching
 }

@@ -116,7 +116,7 @@ public class TurnServer
 			try
 			{
 				var result = await _udpServer.ReceiveAsync();
-				ProcessMessage(result.Buffer, result.RemoteEndPoint);
+				ProcessTURNRegisterMessage(result.Buffer, result.RemoteEndPoint);
 			}
 			catch (Exception ex)
 			{
@@ -175,7 +175,7 @@ public class TurnServer
 		}
 	}
 
-	private void ProcessMessage(byte[] data, IPEndPoint remoteEndPoint)
+	private void ProcessTURNRegisterMessage(byte[] data, IPEndPoint remoteEndPoint)
 	{
 		try
 		{
