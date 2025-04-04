@@ -59,28 +59,26 @@ fi
 
 # 在服务器端检查端口占用并停止进程
 echo -e "${YELLOW}检查服务器端口 $PORT 是否被占用...${NC}"
+# 将相关部分的单引号改为双引号
 sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "if lsof -i udp:${PORT} > /dev/null 2>&1; then
-    echo '端口 ${PORT} 被占用，正在停止相关进程...'
-    # 使用lsof命令查找占用UDP端口的进程
+    echo \"端口 ${PORT} 被占用，正在停止相关进程...\"
     pid=\$(lsof -ti udp:${PORT})
     if [ ! -z \"\$pid\" ]; then
-        echo '正在停止进程 \$pid ...'
-        # 使用kill -9强制终止进程
+        echo \"正在停止进程 \$pid ...\"
         kill -9 \$pid 2>/dev/null || true
         sleep 2
-        # 再次检查端口是否被占用
         if lsof -i udp:${PORT} > /dev/null 2>&1; then
-            echo '无法停止占用端口的进程，请手动检查'
+            echo \"无法停止占用端口的进程，请手动检查\"
             exit 1
         else
-            echo '成功停止占用端口的进程'
+            echo \"成功停止占用端口的进程\"
         fi
     else
-        echo '无法找到占用端口的进程，请手动检查'
+        echo \"无法找到占用端口的进程，请手动检查\"
         exit 1
     fi
 else
-    echo '端口 ${PORT} 未被占用'
+    echo \"端口 ${PORT} 未被占用\"
 fi"
 
 # 创建远程目录
