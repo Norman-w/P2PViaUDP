@@ -12,10 +12,7 @@ public class TURNBroadcastMessage
 		4 + 4 + // EndPoint
 		1 + // IsNeedPrepareAcceptIncomingConnectionForThisClient
 		1 + // IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient
-		16 + // GroupGuid
-		1 + // IsNeedHolePunchingToThisClient
-		1 + // IsFullConeDetected
-		1; // 需要打洞的端口数量
+		16; // GroupGuid
 	//= 49 最少是这个数,而且是当IsNeedHolePunchingToThisClient为false时的最小值
 	
 	/// <summary>
@@ -42,16 +39,6 @@ public class TURNBroadcastMessage
 	/// 要加入的组Guid
 	/// </summary>
 	public Guid GroupGuid { get; init; }
-	
-	/// <summary>
-	/// 这个客户端是否检测到了自己的NAT类型是Full Cone(全锥),如果是,其他客户端可以使用他的这个公网信息直接进行P2P连接
-	/// </summary>
-	public bool IsFullConeDetected { get; init; }
-	/// <summary>
-	/// 收到这个广播消息的客户端是否需要对这个客户端进行打洞,这个值由TURN服务器来决定
-	/// 一旦需要跟这个客户端进行打洞,就需要在后续保持打洞任务的进行和监测,直到打洞成功
-	/// </summary>
-	public bool IsNeedHolePunchingToThisClient { get; init; }
 	/// <summary>
 	/// TURN猜测的这个客户端被打洞时可能用到的端口号信息集合,收到这个消息的客户端需要依次尝试往这些端口发送消息
 	/// </summary>
@@ -67,8 +54,6 @@ public class TURNBroadcastMessage
 		bytesList.Add(IsNeedPrepareAcceptIncomingConnectionForThisClient ? (byte)1 : (byte)0);
 		bytesList.Add(IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient ? (byte)1 : (byte)0);
 		bytesList.AddRange(GroupGuid.ToByteArray());
-		bytesList.Add(IsNeedHolePunchingToThisClient ? (byte)1 : (byte)0);
-		bytesList.Add(IsFullConeDetected ? (byte)1 : (byte)0);
 		// TURN服务器推算出来的要打洞的端口号信息
 		bytesList.Add((byte)EndPointsInferByTURNServerNeedHolePunchingTo.Count);
 		foreach (var endPoint in EndPointsInferByTURNServerNeedHolePunchingTo)
@@ -117,8 +102,6 @@ public class TURNBroadcastMessage
 			IsNeedPrepareAcceptIncomingConnectionForThisClient = isNeedPrepareAcceptIncomingConnectionForThisClient,
 			IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 			GroupGuid = groupGuid,
-			IsNeedHolePunchingToThisClient = isNeedHolePunchingToThisClient,
-			IsFullConeDetected = isFullConeDetected,
 			EndPointsInferByTURNServerNeedHolePunchingTo = endPoints
 		};
 	}

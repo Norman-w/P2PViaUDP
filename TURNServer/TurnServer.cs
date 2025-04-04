@@ -251,8 +251,6 @@ public class TurnServer
 					IsNeedPrepareAcceptIncomingConnectionForThisClient = active == existInGroupEarlierClient,
 					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = active != existInGroupEarlierClient,
 					GroupGuid = newClient.GroupGuid,
-					IsNeedHolePunchingToThisClient = true,
-					IsFullConeDetected = thisNewClient.NATType == NATTypeEnum.FullCone
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
@@ -296,8 +294,6 @@ public class TurnServer
 					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient =
 						isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 					GroupGuid = newClient.GroupGuid,
-					IsNeedHolePunchingToThisClient = true,
-					IsFullConeDetected = existInGroupEarlierClient.NATType == NATTypeEnum.FullCone
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, thisNewClient.EndPointFromTURN);
