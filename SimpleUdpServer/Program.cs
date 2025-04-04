@@ -3,7 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 
 // 创建UdpClient实例并绑定到所有IP地址上
-const int port = 3478; // 替换为需要监听的端口号
+const int port = 3488; // 替换为需要监听的端口号
 using var udpServer = new UdpClient(new IPEndPoint(IPAddress.Any, port));
 
 // 输出服务启动日志
@@ -70,7 +70,7 @@ async Task UserInputClientTest()
 		try
 		{
 			// 提示用户输入目标地址
-			Console.WriteLine("请输入要通讯测试的目标地址和端口 (格式: 127.0.0.1:3478):");
+			Console.WriteLine("请输入要通讯测试的目标地址和端口 (格式: 127.0.0.1:3488):");
 			var input = Console.ReadLine();
 
 			if (string.IsNullOrEmpty(input)) continue;
@@ -80,7 +80,7 @@ async Task UserInputClientTest()
 			if (split.Length != 2 || !IPAddress.TryParse(split[0], out var ip) ||
 			    !int.TryParse(split[1], out var targetPort))
 			{
-				Console.WriteLine("输入格式不正确，请重新输入 (格式: 127.0.0.1:3478)...");
+				Console.WriteLine("输入格式不正确，请重新输入 (格式: 127.0.0.1:3488)...");
 				continue;
 			}
 

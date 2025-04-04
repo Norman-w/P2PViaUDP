@@ -478,8 +478,8 @@ public class STUNClient
 
 			//原因是我们第一轮测试中会向主服务器的主要端口已经发过一条消息(主服务器大喇叭到从服务器和自己的一共4个端口返回那次),所以已经算是建立起来连接了,就会复用之前的端口
 			//而且因为发送完了以后进入到ReceiveAsync状态以后,NAT设备(或者本机)认为这个会话就结束了,所以再使用_udpClient换目的地端口出去的消息,客户端NAT公网端口也有了变化
-			//udpClient->主3478 1发4回消息 建立公网11111
-			//udpClient->主3478,主3479,从3478,从3479 4发4回消息, 第一条复用了11111(NAT复用机制),第2~4条会有新的公网端口(之前进入到ReceiveAsync以为是断开了要创建新映射)
+			//udpClient->主3488 1发4回消息 建立公网11111
+			//udpClient->主3488,主3479,从3488,从3479 4发4回消息, 第一条复用了11111(NAT复用机制),第2~4条会有新的公网端口(之前进入到ReceiveAsync以为是断开了要创建新映射)
 			if (MyEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunMainPortReply.Port
 			    && MyEndPointFromMainStunSecondaryPortReply.Port == _myEndPointFromSlaveStunSecondaryPortReply.Port)
 			{

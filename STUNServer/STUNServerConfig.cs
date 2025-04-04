@@ -63,7 +63,7 @@ public class STUNServerConfig : ConfigBase, IConfig
 
 		#region 用于检测"是哪种锥形"的端口设置
 
-		MainServerWhichKindOfConeRequestAndResponsePort = 3478,
+		MainServerWhichKindOfConeRequestAndResponsePort = 3488,
 		MainServerWhichKindOfConeResponseSecondaryPort = 3479,
 		SlaveServerWhichKindOfConeResponsePrimaryPort = 3480,
 		SlaveServerWhichKindOfConeResponseSecondaryPort = 3481,

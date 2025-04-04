@@ -49,7 +49,7 @@ public class P2PClientConfig : ConfigBase, IConfig
 	public ushort NATTypeConsistencyKeepingCheckingPortTURN { get; set; }
 	public static P2PClientConfig Default => new("97.64.24.135", "121.22.36.190", "97.64.24.135")
 	{
-		STUNWitchKindOfConeServerPort = 3478,
+		STUNWitchKindOfConeServerPort = 3488,
 		/*
 		 
 		 #region 用于检测"是否对称型"的端口设置
@@ -92,7 +92,7 @@ public class P2PClientConfig : ConfigBase, IConfig
 		
 		
 		*/
-		STUNWhichKindOfConeMainServerRequestAndResponsePort = 3478,
+		STUNWhichKindOfConeMainServerRequestAndResponsePort = 3488,
 		STUNWhichKindOfConeMainServerResponseSecondaryPort = 3479,
 		STUNWhichKindOfConeSlaveServerResponsePrimaryPort = 3480,
 		STUNWhichKindOfConeSlaveServerResponseSecondaryPort = 3481,
