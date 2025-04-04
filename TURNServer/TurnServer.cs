@@ -56,10 +56,16 @@ public class TurnServer
 		{
 			// 清理不活跃的客户端
 			clients.RemoveAll(client => (now - client.LastActivityTime).TotalSeconds > CLIENT_TIMEOUT_SECONDS);
-
-			if (clients.Count != 0) continue;
-			_groupDict.TryRemove(groupGuid, out _);
-			Console.WriteLine($"组 {groupGuid} 已被清空并移除");
+			if (clients.Count == 0)
+			{
+				// 如果组内没有客户端了，告知组已经清空,我们先暂时不把组删掉
+				//TODO 后面会增加组如果不存在了(房间没人太久房间也没了)的逻辑
+				Console.WriteLine($"组 {groupGuid} 已经清空");
+			}
+			else
+			{
+				Console.WriteLine($"组 {groupGuid} 仍然存在, 当前客户端数量: {clients.Count}");
+			}
 		}
 	}
 
