@@ -18,7 +18,7 @@ public class TurnServer
 	/// <summary>
 	/// 客户端超时时间
 	/// </summary>
-	private const int CLIENT_TIMEOUT_SECONDS = 10;
+	private const int CLIENT_TIMEOUT_SECONDS = 30;
 	/// <summary>
 	/// 用于控制异步操作的取消令牌,在服务器关闭时取消所有操作
 	/// </summary>
