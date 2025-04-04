@@ -83,8 +83,6 @@ public class TURNBroadcastMessage
 		var isNeedPrepareAcceptIncomingConnectionForThisClient = Convert.ToBoolean(receivedBytes[28]);
 		var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient = Convert.ToBoolean(receivedBytes[29]);
 		var groupGuid = new Guid(receivedBytes.Skip(30).Take(16).ToArray());
-		var isNeedHolePunchingToThisClient = Convert.ToBoolean(receivedBytes[46]);
-		var isFullConeDetected = Convert.ToBoolean(receivedBytes[47]);
 		var endPointCount = receivedBytes[48];
 		var endPoints = new List<IPEndPoint>();
 		for (var i = 0; i < endPointCount; i++)
