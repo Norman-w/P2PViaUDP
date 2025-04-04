@@ -15,6 +15,14 @@ public class TurnServer
 	private readonly ConcurrentDictionary<Guid, List<TURNClient>> _groupDict;
 	private readonly TURNServerConfig _settings;
 	private bool _isRunning;
+	/// <summary>
+	/// 客户端超时时间
+	/// </summary>
+	private const int CLIENT_TIMEOUT_SECONDS = 10;
+	/// <summary>
+	/// 用于控制异步操作的取消令牌,在服务器关闭时取消所有操作
+	/// </summary>
+	private readonly CancellationTokenSource _cts = new();
 
 	public TurnServer(TURNServerConfig settings)
 	{
@@ -27,6 +35,47 @@ public class TurnServer
 		// 添加测试组
 		_groupDict.TryAdd(Guid.Parse("00000000-0000-0000-0000-000000000001"),
 			new List<TURNClient>());
+		
+		_ = StartCleanupTaskAsync();
+	}
+
+	private async Task StartCleanupTaskAsync()
+	{
+		while (!_cts.Token.IsCancellationRequested)
+		{
+			//每隔一段时间检查客户端的活动状态
+			await Task.Delay(TimeSpan.FromSeconds(CLIENT_TIMEOUT_SECONDS), _cts.Token);
+			CleanupInactiveClients();
+		}
+	}
+
+	private void CleanupInactiveClients()
+	{
+		var now = DateTime.UtcNow;
+		foreach (var (groupGuid, clients) in _groupDict)
+		{
+			// 清理不活跃的客户端
+			clients.RemoveAll(client => (now - client.LastActivityTime).TotalSeconds > CLIENT_TIMEOUT_SECONDS);
+
+			if (clients.Count != 0) continue;
+			_groupDict.TryRemove(groupGuid, out _);
+			Console.WriteLine($"组 {groupGuid} 已被清空并移除");
+		}
+	}
+
+	/// <summary>
+	/// 更新客户端的活动时间
+	/// </summary>
+	/// <param name="clientId"></param>
+	private void UpdateClientActivity(Guid clientId)
+	{
+		foreach (var group in _groupDict.Values)
+		{
+			var client = group.FirstOrDefault(c=>c.Guid == clientId);
+			if (client == null) continue;
+			client.LastActivityTime = DateTime.UtcNow;
+			break;
+		}
 	}
 
 	public async Task StartAsync()
@@ -98,6 +147,8 @@ public class TurnServer
 			}
 
 			var request = TURNCheckNATConsistencyRequest.FromBytes(data);
+			
+			UpdateClientActivity(request.ClientId);
 
 			Console.WriteLine($"收到NAT一致性检查请求 来自: {remoteEndPoint}");
 
@@ -132,6 +183,8 @@ public class TurnServer
 			Console.WriteLine($"Guid: {message.Guid}");
 			Console.WriteLine($"EndPoint: {message.EndPoint}");
 			Console.WriteLine($"GroupGuid: {message.GroupGuid}");
+			
+			UpdateClientActivity(message.Guid);
 
 			if (_groupDict.TryGetValue(message.GroupGuid, out var group))
 			{

@@ -19,6 +19,10 @@ public partial class TURNClient
 	/// 客户端的NAT类型
 	/// </summary>
 	public NATTypeEnum NATType { get; init; }
+	/// <summary>
+	/// 客户端的最后活动时间
+	/// </summary>
+	public DateTime LastActivityTime { get; set; } = DateTime.UtcNow;
 }
 
 public partial class TURNClient
