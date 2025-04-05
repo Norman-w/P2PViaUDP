@@ -43,7 +43,7 @@ public partial class PeerClient
 	/// <summary>
 	/// 从对方接收到打洞消息的时间
 	/// </summary>
-	public DateTime? ReceivedHolePunchMessageFromHimTime { get; init; }
+	public DateTime? ReceivedHolePunchMessageFromHimTime { get; set; }
 	
 	/// <summary>
 	/// 我给他发送打洞消息的时间

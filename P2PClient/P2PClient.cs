@@ -256,17 +256,15 @@ public class P2PClient
 		{
 			// 从字节数组中解析P2P打洞消息
 			var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingRequestMessage.FromBytes(data);
+			Console.ForegroundColor = ConsoleColor.DarkYellow;
 			Console.WriteLine(
 				$"收到P2P打洞消息，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {messageSenderEndPoint}的客户端");
-			Console.ForegroundColor = ConsoleColor.Cyan;
-			Console.WriteLine($"更新他的实际通讯地址为: {messageSenderEndPoint}");
 			Console.ResetColor();
-			holePunchingMessageFromOtherClient.SourceEndPoint = messageSenderEndPoint;
 			// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
 			var peerId = holePunchingMessageFromOtherClient.SourceClientId;
 			if (!_peerClients.TryGetValue(peerId, out var peer))
 			{
-				var newPeerClient = new PeerClient(holePunchingMessageFromOtherClient.SourceEndPoint)
+				var newPeerClient = new PeerClient(messageSenderEndPoint)
 				{
 					Guid = peerId,
 					ReceivedHolePunchMessageFromHimTime = DateTime.Now,
@@ -276,7 +274,9 @@ public class P2PClient
 			}
 			else
 			{
-				peer.EndPoint = holePunchingMessageFromOtherClient.SourceEndPoint;
+				peer.EndPoint = messageSenderEndPoint;
+				peer.ReceivedHolePunchMessageFromHimTime = DateTime.Now;
+				Console.WriteLine($"更新PeerClient: {peerId}");
 			}
 
 			#region 如果他是对称型的,他过来的时候不一定是什么端口,他自己也不知道,我得告诉他
@@ -417,13 +417,14 @@ public class P2PClient
 		}
 		#endregion
 
-		var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage
-		{
-			SourceEndPoint = _myEndPointFromMainStunSecondPortReply!,
-			DestinationEndPoint = broadcastMessage.ClientSideEndPointToTURN,
-			DestinationClientId = broadcastMessage.Guid,
-			SourceClientId = _clientId, GroupId = broadcastMessage.GroupGuid, SendTime = DateTime.Now
-		};
+		var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage(
+			broadcastMessage.GroupGuid,
+			broadcastMessage.ClientSideEndPointToTURN,
+			broadcastMessage.Guid,
+			_myNATType,
+			_clientId,
+			_myEndPointFromMainStunSecondPortReply
+		);
 
 		//加入到PeerClient集合中
 		if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))

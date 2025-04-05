@@ -9,6 +9,24 @@ namespace P2PViaUDP.Model.Client;
 /// </summary>
 public class Client2ClientP2PHolePunchingRequestMessage
 {
+	public Client2ClientP2PHolePunchingRequestMessage(
+		Guid groupId,
+		IPEndPoint destinationEndPoint, 
+		Guid destinationClientId, 
+		NATTypeEnum sourceNatType, 
+		Guid sourceClientId, 
+		IPEndPoint? sourceEndPoint = null
+		)
+	{
+		DestinationEndPoint = destinationEndPoint;
+		SourceNatType = sourceNatType;
+		SourceClientId = sourceClientId;
+		DestinationClientId = destinationClientId;
+		GroupId = groupId;
+		SourceEndPoint = sourceEndPoint;
+		SendTime = DateTime.Now;
+	}
+
 	private static MessageType MessageType => MessageType.P2PHolePunchingRequest;
 	private static uint DefaultMessageLength => 
 	4 + // MessageType
@@ -24,39 +42,41 @@ public class Client2ClientP2PHolePunchingRequestMessage
 	//= 80
 	
 	/// <summary>
-	/// 谁发起的打洞,并不是本条消息是谁发送的
+	/// 谁发起的打洞,并不是本条消息是谁发送的,这个不一定是有值的,因为对称型NAT在开始打洞的时候并不知道自己的端口信息
+	/// 但是会知道自己的类型
 	/// </summary>
-	public IPEndPoint SourceEndPoint { get; set; }
+	public IPEndPoint? SourceEndPoint { get; private init; }
 	/// <summary>
 	/// 谁接收打洞请求,并不是本条消息是谁接收的
 	/// </summary>
-	public IPEndPoint DestinationEndPoint { get; set; }
+	public IPEndPoint DestinationEndPoint { get; init; }
 	/// <summary>
 	/// 源NAT类型,如果是对称型的,则包到达目的地以后才知道源的出网时候的真正端口号.这种request需要修正了信息以后再response返回去
 	/// </summary>
-	public NATTypeEnum SourceNatType { get; set; }
+	public NATTypeEnum SourceNatType { get; init; }
 	/// <summary>
 	/// 源客户端ID,发起打洞的客户端ID
 	/// </summary>
-	public Guid SourceClientId { get; set; }
+	public Guid SourceClientId { get; init; }
 	/// <summary>
 	/// 目标客户端ID,接收打洞请求的客户端ID
 	/// </summary>
-	public Guid DestinationClientId { get; set; }
+	public Guid DestinationClientId { get; init; }
 	/// <summary>
 	/// 组ID
 	/// </summary>
-	public Guid GroupId { get; set; }
+	public Guid GroupId { get; init; }
 	/// <summary>
 	/// 发送时间
 	/// </summary>
-	public DateTime SendTime { get; set; } = DateTime.Now;
+	public DateTime SendTime { get; init; }
 	public byte[] ToBytes()
 	{
 		var bytesList = new List<byte>();
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
-		bytesList.AddRange(SourceEndPoint.Address.GetAddressBytes());
-		bytesList.AddRange(BitConverter.GetBytes(SourceEndPoint.Port));
+		var sourceEndPoint = SourceEndPoint ?? new IPEndPoint(IPAddress.Any, 0);
+		bytesList.AddRange(sourceEndPoint.Address.GetAddressBytes());
+		bytesList.AddRange(BitConverter.GetBytes(sourceEndPoint.Port));
 		bytesList.AddRange(DestinationEndPoint.Address.GetAddressBytes());
 		bytesList.AddRange(BitConverter.GetBytes(DestinationEndPoint.Port));
 		bytesList.AddRange(BitConverter.GetBytes((int)SourceNatType));
@@ -88,14 +108,15 @@ public class Client2ClientP2PHolePunchingRequestMessage
 		var destinationClientId = new Guid(bytes.Skip(40).Take(16).ToArray());
 		var groupId = new Guid(bytes.Skip(56).Take(16).ToArray());
 		var sendTime = new DateTime(BitConverter.ToInt64(bytes, 72));
-		return new Client2ClientP2PHolePunchingRequestMessage
+		return new Client2ClientP2PHolePunchingRequestMessage(
+			groupId,
+			destinationEndPoint, 
+			destinationClientId,
+			sourceNatType, 
+			sourceClientId,
+			sourceEndPoint
+			)
 		{
-			SourceEndPoint = sourceEndPoint,
-			DestinationEndPoint = destinationEndPoint,
-			SourceClientId = sourceClientId,
-			DestinationClientId = destinationClientId,
-			SourceNatType = sourceNatType,
-			GroupId = groupId,
 			SendTime = sendTime
 		};
 	}
