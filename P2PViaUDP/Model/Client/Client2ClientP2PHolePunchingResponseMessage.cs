@@ -8,7 +8,7 @@ namespace P2PViaUDP.Model.Client;
 /// </summary>
 public partial class Client2ClientP2PHolePunchingResponseMessage
 {
-	private static MessageType MessageType => MessageType.P2PHolePunchingRequest;
+	private static MessageType MessageType => MessageType.P2PHolePunchingResponse;
 	private static uint DefaultMessageLength => 
 	4 + // MessageType
 	4 + // ActiveClientEndPoint.Address
@@ -67,10 +67,10 @@ public partial class Client2ClientP2PHolePunchingResponseMessage
 		var passiveClientPort = BitConverter.ToInt32(receivedBytes, 16);
 		var passiveClientEndPoint = new IPEndPoint(passiveClientAddress, passiveClientPort);
 		var passiveClientNATTye = (NATTypeEnum)BitConverter.ToInt32(receivedBytes, 20);
-		var activeClientId = new Guid(receivedBytes.Skip(20).Take(16).ToArray());
-		var passiveClientId = new Guid(receivedBytes.Skip(36).Take(16).ToArray());
-		var groupId = new Guid(receivedBytes.Skip(52).Take(16).ToArray());
-		var sendTime = new DateTime(BitConverter.ToInt64(receivedBytes, 68));
+		var activeClientId = new Guid(receivedBytes.Skip(24).Take(16).ToArray());
+		var passiveClientId = new Guid(receivedBytes.Skip(40).Take(16).ToArray());
+		var groupId = new Guid(receivedBytes.Skip(56).Take(16).ToArray());
+		var sendTime = new DateTime(BitConverter.ToInt64(receivedBytes, 72));
 
 		return new Client2ClientP2PHolePunchingResponseMessage
 		{
