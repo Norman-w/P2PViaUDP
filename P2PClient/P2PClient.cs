@@ -9,6 +9,7 @@
 
 */
 
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using P2PViaUDP.Model;
@@ -25,7 +26,9 @@ public class P2PClient
 	/// <summary>
 	/// 跟我打洞的客户端集合,key是对方的Guid,value是对方的信息以及和我的相关交互信息
 	/// </summary>
-	private readonly Dictionary<Guid, PeerClient> _peerClients = new();
+	private readonly ConcurrentDictionary<Guid, PeerClient> _peerClients = new();
+
+	private readonly object _peerClientsLock = new object();
 
 	private readonly UdpClient _udpClient = new(new IPEndPoint(IPAddress.Any, 0));
 	private readonly P2PClientConfig _settings = P2PClientConfig.Default;
@@ -217,24 +220,28 @@ public class P2PClient
 			// 从字节数组中解析P2P心跳消息
 			var heartbeatMessage = P2PHeartbeatMessage.FromBytes(data);
 			Console.WriteLine($"收到P2P心跳消息，来自: {heartbeatMessage.SenderId}");
-			// 更新对方的心跳时间
-			if (_peerClients.TryGetValue(heartbeatMessage.SenderId, out var peer))
+
+			// 线程安全地更新对方的心跳时间
+			lock (_peerClientsLock)
 			{
-				if (peer.LastHeartbeatFromHim == DateTime.MinValue || peer.LastHeartbeatFromHim == null)
+				if (_peerClients.TryGetValue(heartbeatMessage.SenderId, out var peer))
 				{
-					peer.LastHeartbeatFromHim = DateTime.Now;
-					Console.WriteLine(
-						$"首次收到对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}, 开始给他发送心跳包");
+					if (peer.LastHeartbeatFromHim == DateTime.MinValue || peer.LastHeartbeatFromHim == null)
+					{
+						peer.LastHeartbeatFromHim = DateTime.Now;
+						Console.WriteLine(
+							$"首次收到对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}, 开始给他发送心跳包");
+					}
+					else
+					{
+						peer.LastHeartbeatFromHim = DateTime.Now;
+						Console.WriteLine($"已更新对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}");
+					}
 				}
 				else
 				{
-					peer.LastHeartbeatFromHim = DateTime.Now;
-					Console.WriteLine($"已更新对方({heartbeatMessage.SenderId})的心跳时间: {peer.LastHeartbeatFromHim}");
+					Console.WriteLine($"未找到对方的信息: {heartbeatMessage.SenderId}");
 				}
-			}
-			else
-			{
-				Console.WriteLine($"未找到对方的信息: {heartbeatMessage.SenderId}");
 			}
 		}
 		catch (Exception ex)
@@ -262,34 +269,41 @@ public class P2PClient
 			Console.WriteLine(
 				$"收到P2P打洞消息{messageId}，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {messageSenderEndPoint}的客户端");
 			Console.ResetColor();
-			// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
-			var peerId = holePunchingMessageFromOtherClient.SourceClientId;
-			if (!_peerClients.TryGetValue(peerId, out var peer))
+
+			// 线程安全地处理客户端信息
+			PeerClient peer;
+			lock (_peerClientsLock)
 			{
-				var newPeerClient = new PeerClient(messageSenderEndPoint)
+				// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
+				var peerId = holePunchingMessageFromOtherClient.SourceClientId;
+				if (!_peerClients.TryGetValue(peerId, out peer!))
 				{
-					Guid = peerId,
-					ReceivedHolePunchMessageFromHimTime = DateTime.Now,
-				};
-				_peerClients.Add(peerId, newPeerClient);
-				Console.WriteLine($"新的PeerClient已加入: {peerId}");
-			}
-			else
-			{
-				peer.EndPoint = messageSenderEndPoint;
-				peer.ReceivedHolePunchMessageFromHimTime = DateTime.Now;
-				Console.WriteLine($"更新PeerClient: {peerId}");
-			}
+					var newPeerClient = new PeerClient(messageSenderEndPoint)
+					{
+						Guid = peerId,
+						ReceivedHolePunchMessageFromHimTime = DateTime.Now,
+					};
+					_peerClients.TryAdd(peerId, newPeerClient);
+					peer = newPeerClient;
+					Console.WriteLine($"新的PeerClient已加入: {peerId}");
+				}
+				else
+				{
+					peer.EndPoint = messageSenderEndPoint;
+					peer.ReceivedHolePunchMessageFromHimTime = DateTime.Now;
+					Console.WriteLine($"更新PeerClient: {peerId}");
+				}
 
-			#region 如果他是对称型的,他过来的时候不一定是什么端口,他自己也不知道,我得告诉他
+				#region 如果他是对称型的,他过来的时候不一定是什么端口,他自己也不知道,我得告诉他
 
-			if (holePunchingMessageFromOtherClient.SourceNatType == NATTypeEnum.Symmetric)
-			{
-				Console.WriteLine($"打洞请求的来源是对称型NAT,需要告诉他他自己是什么端口: {messageSenderEndPoint}");
-				if (peer != null) peer.EndPoint = messageSenderEndPoint;
+				if (holePunchingMessageFromOtherClient.SourceNatType == NATTypeEnum.Symmetric)
+				{
+					Console.WriteLine($"打洞请求的来源是对称型NAT,需要告诉他他自己是什么端口: {messageSenderEndPoint}");
+					peer.EndPoint = messageSenderEndPoint;
+				}
+
+				#endregion
 			}
-
-			#endregion
 
 			#region 给他发送P2P打洞响应消息
 
@@ -309,8 +323,11 @@ public class P2PClient
 			_udpClient.SendAsync(responseBytes, responseBytes.Length, messageSenderEndPoint);
 
 			#endregion
+
 			// 然后我开启一个新的线程去给他发送我的心跳包给他
-			ContinuousSendP2PHeartbeatMessagesAsync(messageSenderEndPoint);
+			ContinuousSendP2PHeartbeatMessagesAsync(
+				holePunchingMessageFromOtherClient.SourceClientId,
+				messageSenderEndPoint);
 
 			if (_myEndPointFromMainStunSecondPortReply == null)
 			{
@@ -332,17 +349,24 @@ public class P2PClient
 		{
 			// 从字节数组中解析P2P打洞响应消息
 			var holePunchingResponseMessage = Client2ClientP2PHolePunchingResponseMessage.FromBytes(data);
-			// 如果跟我打洞的这个客户端我们已经有peer的有效连接了 则忽略这个打洞响应即可
-			if (_peerClients.Any(
-				    x => x.Key == holePunchingResponseMessage.RequestReceiverClientId
-				         && x.Value.EndPoint.Equals(holePunchingResponseMessage.RequestReceiverEndPoint)
-				         && x.Value.IsP2PHasBeenEstablished))
+
+			// 线程安全地检查连接状态
+			bool connectionEstablished;
+			lock (_peerClientsLock)
+			{
+				// 如果跟我打洞的这个客户端我们已经有peer的有效连接了 则忽略这个打洞响应即可
+				connectionEstablished = _peerClients.Any(
+					x => x.Key == holePunchingResponseMessage.RequestReceiverClientId
+					     && x.Value.EndPoint.Equals(holePunchingResponseMessage.RequestReceiverEndPoint)
+					     && x.Value.IsP2PHasBeenEstablished);
+			}
+
+			if (connectionEstablished)
 			{
 				Console.WriteLine($"对方({holePunchingResponseMessage.RequestReceiverClientId})已经跟我创建连接了,不需要再发送打洞响应消息了");
 				return Task.CompletedTask;
 			}
-			
-			
+
 			// 我是主动方,所以我发出去了打洞消息,才有响应消息
 			Console.WriteLine(
 				$"收到P2P打洞响应消息: {holePunchingResponseMessage}, 我实际打洞后跟他通讯的地址是: {holePunchingResponseMessage.RequestSenderEndPoint}, 他实际打洞后跟我通讯的地址是: {holePunchingResponseMessage.RequestReceiverEndPoint}");
@@ -351,7 +375,9 @@ public class P2PClient
 			Console.WriteLine($"我是主动方,我之前已经发送过打洞请求,这是他给我的回应,所以我们已经打通了,下面开始给他发送心跳包");
 			Console.ResetColor();
 			// 然后我开启一个新的线程去给她发送我的心跳包给他
-			ContinuousSendP2PHeartbeatMessagesAsync(holePunchingResponseMessage.RequestReceiverEndPoint);
+			ContinuousSendP2PHeartbeatMessagesAsync(
+				holePunchingResponseMessage.RequestSenderClientId,
+				holePunchingResponseMessage.RequestSenderEndPoint);
 		}
 		catch (Exception ex)
 		{
@@ -381,7 +407,7 @@ public class P2PClient
 			}
 
 			await HolePunchingToClientAsync(broadcastMessage);
-			
+
 			// 打洞后检查NAT一致性
 			if (_myEndPointFromMainStunSecondPortReply != null)
 			{
@@ -408,16 +434,23 @@ public class P2PClient
 
 	private async Task HolePunchingToClientAsync(TURNBroadcastMessage broadcastMessage)
 	{
-		// 如果跟我打洞的这个客户端我们已经有peer的有效连接了 则忽略这个打洞请求即可
-		if (_peerClients.Any(
-			    x => x.Key == broadcastMessage.Guid
-			         && x.Value.EndPoint.Equals(broadcastMessage.ClientSideEndPointToTURN)
-			         && x.Value.IsP2PHasBeenEstablished))
+		bool connectionEstablished;
+
+		// 线程安全地检查连接状态
+		lock (_peerClientsLock)
+		{
+			// 如果跟我打洞的这个客户端我们已经有peer的有效连接了 则忽略这个打洞请求即可
+			connectionEstablished = _peerClients.Any(
+				x => x.Key == broadcastMessage.Guid
+				     && x.Value.EndPoint.Equals(broadcastMessage.ClientSideEndPointToTURN)
+				     && x.Value.IsP2PHasBeenEstablished);
+		}
+
+		if (connectionEstablished)
 		{
 			Console.WriteLine($"对方({broadcastMessage.Guid})已经跟我创建连接了,不需要再发送打洞请求了");
 			return;
 		}
-		#endregion
 
 		var holePunchingMessage = new Client2ClientP2PHolePunchingRequestMessage(
 			broadcastMessage.GroupGuid,
@@ -431,66 +464,112 @@ public class P2PClient
 			RequestId = Guid.NewGuid(),
 		};
 
-		//加入到PeerClient集合中
-		if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
+		//线程安全地加入到PeerClient集合中
+		lock (_peerClientsLock)
 		{
-			_peerClients.Add(broadcastMessage.Guid, new PeerClient(holePunchingMessage.DestinationEndPoint)
+			if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
 			{
-				SendHolePunchMessageToHimTime = DateTime.Now,
-				Guid = broadcastMessage.Guid
-			});
-			Console.WriteLine($"新的PeerClient已加入: {broadcastMessage.Guid}");
-		}
-		else
-		{
-			peer.EndPoint = holePunchingMessage.DestinationEndPoint;
+				_peerClients.TryAdd(broadcastMessage.Guid, new PeerClient(holePunchingMessage.DestinationEndPoint)
+				{
+					SendHolePunchMessageToHimTime = DateTime.Now,
+					Guid = broadcastMessage.Guid
+				});
+				Console.WriteLine($"新的PeerClient已加入: {broadcastMessage.Guid}");
+			}
+			else
+			{
+				peer.EndPoint = holePunchingMessage.DestinationEndPoint;
+			}
 		}
 
 		// 处理P2P打洞
 		await SendHolePunchingMessageAsync(holePunchingMessage);
 	}
+
 	#endregion
-	
+
+	#endregion
+
 	#endregion
 
 	#region Out 发送消息
 
 	#region 持续发送P2P心跳包
 
-	private void ContinuousSendP2PHeartbeatMessagesAsync(IPEndPoint sendHeartbeatMessageTo)
+	private void ContinuousSendP2PHeartbeatMessagesAsync(Guid heartbeatReceiverClientId,
+		IPEndPoint sendHeartbeatMessageTo)
 	{
 		Console.ForegroundColor = ConsoleColor.Red;
 		Console.WriteLine("正在启动心跳进程,请稍等...");
 		Console.ResetColor();
-		//如果已经为这个客户端开通过心跳(从客户端接收到过打洞请求),则不需要再开了
-		if (_peerClients.Any(x => x.Key == _clientId))
+
+		// 使用锁来保证线程安全地检查和更新心跳状态
+		var shouldStartHeartbeat = false;
+		PeerClient peerToSendHeartbeat;
+
+		lock (_peerClientsLock)
+		{
+			// 查找对应的peer
+			if (!_peerClients.TryGetValue(heartbeatReceiverClientId, out var peerEntry))
+			{
+				Console.WriteLine($"未找到对应的PeerClient: {heartbeatReceiverClientId}");
+				return;
+			}
+
+			// 检查是否已经启动了心跳
+			if (peerEntry.LastHeartbeatToHim == null)
+			{
+				shouldStartHeartbeat = true;
+				peerEntry.LastHeartbeatToHim = DateTime.Now;
+			}
+		}
+
+		if (!shouldStartHeartbeat)
 		{
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine($"对方({sendHeartbeatMessageTo})已经跟我创建连接了,不需要再发送心跳包了");
+			Console.WriteLine($"已经为终结点 {sendHeartbeatMessageTo} 启动了心跳进程，不需要再次启动");
 			Console.ResetColor();
 			return;
 		}
+
+		// 启动心跳任务
 		Task.Run(async () =>
 		{
-			Console.WriteLine("开始发送心跳包");
-			var sentTimes = 0;
-			while (_isRunning)
+			try
 			{
-				sentTimes++;
-				if (sentTimes > 2000)
+				Console.WriteLine($"开始向 {sendHeartbeatMessageTo} 发送心跳包");
+				var sentTimes = 0;
+				while (_isRunning)
 				{
-					Console.WriteLine("已发送3次心跳包，停止发送");
-					break;
-				}
+					sentTimes++;
+					if (sentTimes > 2000)
+					{
+						Console.WriteLine("已发送心跳包超过2000次，停止发送");
+						break;
+					}
 
-				var heartbeatMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P HEARTBEAT {sentTimes}");
-				//发送
-				var heartbeatBytes = heartbeatMessage.ToBytes();
-				await _udpClient.SendAsync(heartbeatBytes, heartbeatBytes.Length,
-					sendHeartbeatMessageTo);
-				Console.WriteLine($"已发送心跳包到: {sendHeartbeatMessageTo}, 第{sentTimes}次");
-				//延迟2秒继续发
-				await Task.Delay(2000);
+					var heartbeatMessage = new P2PHeartbeatMessage(_clientId, $"NORMAN P2P HEARTBEAT {sentTimes}");
+					//发送
+					var heartbeatBytes = heartbeatMessage.ToBytes();
+					await _udpClient.SendAsync(heartbeatBytes, heartbeatBytes.Length, sendHeartbeatMessageTo);
+					Console.WriteLine($"已发送心跳包到: {sendHeartbeatMessageTo}, 第{sentTimes}次");
+
+					// 线程安全地更新心跳时间
+					lock (_peerClientsLock)
+					{
+						if (_peerClients.TryGetValue(heartbeatReceiverClientId, out var currentPeer))
+						{
+							currentPeer.LastHeartbeatToHim = DateTime.Now;
+						}
+					}
+
+					//延迟2秒继续发
+					await Task.Delay(2000);
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"心跳发送异常: {ex.Message}");
 			}
 		});
 	}
@@ -508,11 +587,18 @@ public class P2PClient
 		{
 			try
 			{
-				//检查一下这个客户端是不是已经跟我创建连接了.如果创建了,则退出
-				if (_peerClients.Any(
-					    x => x.Key == message.DestinationClientId
-					         && x.Value.EndPoint.Equals(message.DestinationEndPoint)
-					         && x.Value.IsP2PHasBeenEstablished))
+				// 线程安全地检查连接状态
+				bool connectionEstablished;
+				lock (_peerClientsLock)
+				{
+					//检查一下这个客户端是不是已经跟我创建连接了.如果创建了,则退出
+					connectionEstablished = _peerClients.Any(
+						x => x.Key == message.DestinationClientId
+						     && x.Value.EndPoint.Equals(message.DestinationEndPoint)
+						     && x.Value.IsP2PHasBeenEstablished);
+				}
+
+				if (connectionEstablished)
 				{
 					Console.WriteLine($"对方({message.DestinationClientId})已经跟我创建连接了,不需要再发送打洞消息了");
 					break;
@@ -522,7 +608,8 @@ public class P2PClient
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
 				var messageId = message.RequestId.ToString()[..8];
 				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine($"我发出的P2P打洞消息 {messageId} 已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
+				Console.WriteLine(
+					$"我发出的P2P打洞消息 {messageId} 已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
 				Console.ResetColor();
 			}
 			catch (Exception ex)
