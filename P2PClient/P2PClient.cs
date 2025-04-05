@@ -462,13 +462,12 @@ public class P2PClient
 		Console.ForegroundColor = ConsoleColor.Red;
 		Console.WriteLine("正在启动心跳进程,请稍等...");
 		Console.ResetColor();
-		//如果这个客户端已经跟我建立起来正常连接并且已启动发送心跳进程了,则不再需要新开了
-		if (_peerClients.Any(
-			    x => x.Key == _clientId
-			         && x.Value.EndPoint.Equals(sendHeartbeatMessageTo)
-			         && x.Value.IsP2PHasBeenEstablished))
+		//如果已经为这个客户端开通过心跳(从客户端接收到过打洞请求),则不需要再开了
+		if (_peerClients.Any(x => x.Key == _clientId))
 		{
+			Console.ForegroundColor = ConsoleColor.Red;
 			Console.WriteLine($"对方({sendHeartbeatMessageTo})已经跟我创建连接了,不需要再发送心跳包了");
+			Console.ResetColor();
 			return;
 		}
 		Task.Run(async () =>
