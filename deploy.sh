@@ -7,8 +7,54 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 服务器信息
-SERVER="root@norman.wang"
+# 从.env.development文件读取环境变量
+ENV_FILE=".env.development"
+if [ -f "$ENV_FILE" ]; then
+    echo -e "${YELLOW}从 $ENV_FILE 读取环境变量...${NC}"
+    
+    # 逐行读取环境变量，处理注释、引号和空格
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 跳过空行和完全由注释组成的行
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        
+        # 提取变量名和值，去除注释部分
+        if [[ "$line" =~ ^[[:space:]]*([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*) ]]; then
+            key="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+            
+            # 去除可能存在的注释
+            value=$(echo "$value" | sed -E 's/#.*//g')
+            
+            # 去除首尾空格
+            value=$(echo "$value" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+            
+            # 去除可能存在的引号
+            value=$(echo "$value" | sed -E 's/^["\047]|["\047]$//g')
+            
+            # 设置环境变量
+            declare "$key=$value"
+            echo -e "设置环境变量: ${GREEN}$key${NC}"
+        fi
+    done < "$ENV_FILE"
+    
+    # 使用环境变量设置服务器信息
+    if [ ! -z "$SERVER_USERNAME" ] && [ ! -z "$SERVER_ADDRESS" ]; then
+        SERVER="${SERVER_USERNAME}@${SERVER_ADDRESS}"
+        if [ ! -z "$SERVER_PORT" ]; then
+            SSH_PORT_OPTION="-p $SERVER_PORT"
+        fi
+        echo -e "${GREEN}从环境变量设置服务器: $SERVER${NC}"
+    else
+        echo -e "${YELLOW}未找到服务器信息环境变量，使用默认值${NC}"
+        SERVER="root@norman.wang"
+    fi
+else
+    echo -e "${YELLOW}未找到 $ENV_FILE 文件，使用默认设置${NC}"
+    SERVER="root@norman.wang"
+fi
+
 REMOTE_DIR="/opt/P2PViaUdp"
 REMOTE_SCRIPT="server_deploy.sh"
 
@@ -25,13 +71,15 @@ if ! command -v sshpass &> /dev/null; then
     exit 1
 fi
 
-# 获取密码
-read -s -p "请输入服务器密码: " SERVER_PASS
-echo
+# 如果环境变量中没有密码，则提示输入
+if [ -z "$SERVER_PASSWORD" ]; then
+    read -s -p "请输入服务器密码: " SERVER_PASSWORD
+    echo
+fi
 
 # 测试连接
 echo -e "${YELLOW}测试服务器连接...${NC}"
-if ! sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "echo '连接成功'" &> /dev/null; then
+if ! sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_PORT_OPTION $SERVER "echo '连接成功'" &> /dev/null; then
     echo -e "${RED}连接失败，请检查服务器地址和密码${NC}"
     exit 1
 fi
@@ -96,8 +144,12 @@ echo -e "${YELLOW}打包完成，文件大小: ${FILESIZE}${NC}"
 
 # 上传压缩包到服务器
 echo -e "${YELLOW}上传文件到服务器...${NC}"
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p $REMOTE_DIR"
-sshpass -p "$SERVER_PASS" rsync -avz --progress --stats $TEMP_DIR/p2p_deploy.tar.gz $SERVER:$REMOTE_DIR/
+sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_PORT_OPTION $SERVER "mkdir -p $REMOTE_DIR"
+sshpass -p "$SERVER_PASSWORD" rsync -avz --progress --stats $TEMP_DIR/p2p_deploy.tar.gz $SERVER:$REMOTE_DIR/
+
+# 上传完成后立即清理本地临时文件
+echo -e "${YELLOW}清理本地临时文件...${NC}"
+rm -rf $TEMP_DIR
 
 # 在本地完成后显示分割线
 echo -e "\n${BLUE}=========================================================${NC}"
@@ -106,13 +158,9 @@ echo -e "${BLUE}=========================================================${NC}\n
 
 # 在服务器上触发服务器端脚本
 echo -e "${YELLOW}在服务器上启动部署...${NC}"
-sshpass -p "$SERVER_PASS" ssh -t -o StrictHostKeyChecking=no $SERVER "cd $REMOTE_DIR && tar -xzf p2p_deploy.tar.gz && bash $REMOTE_SCRIPT $SERVICE_NAME && rm -f p2p_deploy.tar.gz"
-
-# 清理临时文件
-echo -e "${YELLOW}清理本地临时文件...${NC}"
-rm -rf $TEMP_DIR
+sshpass -p "$SERVER_PASSWORD" ssh -t -o StrictHostKeyChecking=no $SSH_PORT_OPTION $SERVER "cd $REMOTE_DIR && tar -xzf p2p_deploy.tar.gz && rm -f p2p_deploy.tar.gz && bash $REMOTE_SCRIPT $SERVICE_NAME"
 
 # 清除密码变量
-unset SERVER_PASS
+unset SERVER_PASSWORD
 
 echo -e "${GREEN}部署完成${NC}"
