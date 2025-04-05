@@ -14,7 +14,7 @@ echo -e "${BLUE}=========================================================${NC}\n
 
 # 获取参数
 SERVICE_NAME=$1
-BASE_DIR="/opt/P2PViaUdp"
+BASE_DIR="/tmp/P2PViaUdp"
 
 # 如果没有指定服务名称，则退出
 if [ -z "$SERVICE_NAME" ]; then

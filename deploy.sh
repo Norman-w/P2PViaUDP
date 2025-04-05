@@ -55,7 +55,7 @@ else
     SERVER="root@norman.wang"
 fi
 
-REMOTE_DIR="/opt/P2PViaUdp"
+REMOTE_DIR="/tmp/P2PViaUdp"
 REMOTE_SCRIPT="server_deploy.sh"
 
 # 检查server_deploy.sh是否存在
