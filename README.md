@@ -15,6 +15,21 @@ SERVER_USERNAME = "" #服务器用户名
 SERVER_PASSWORD = "" #服务器密码
 SERVER_PORT = "" #服务器端口
 ```
+* **两个**终端分别运行
+```bash 
+./deploy.sh
+```
+分别选择1(STUN)和2(TURN)进行部署.
+* 新开**两个**终端运行
+```bash
+./run-test-p2p-client-in-docker.sh
+```
+进行测试 , 或者直接在终端中运行 
+```bash
+dotnet run --project P2PClient/P2PClient.csproj
+``` 
+启动客户端, 该客户端会自动连接到STUN和TURN服务器,并进行打洞测试.
+* 从STUN,TURN,两个客户端的终端分别观察日志了解基本流程.
 
 ## 提笔忘字
 客户端发送到STUN服务端消息确认自己NAT类型时,我将设计成多种发送和接收方式:
