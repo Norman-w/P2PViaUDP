@@ -71,20 +71,6 @@ if ! command -v sshpass &> /dev/null; then
     exit 1
 fi
 
-# 如果环境变量中没有密码，则提示输入
-if [ -z "$SERVER_PASSWORD" ]; then
-    read -s -p "请输入服务器密码: " SERVER_PASSWORD
-    echo
-fi
-
-# 测试连接
-echo -e "${YELLOW}测试服务器连接...${NC}"
-if ! sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_PORT_OPTION $SERVER "echo '连接成功'" &> /dev/null; then
-    echo -e "${RED}连接失败，请检查服务器地址和密码${NC}"
-    exit 1
-fi
-echo -e "${GREEN}连接成功${NC}"
-
 # 选择服务
 echo -e "${YELLOW}请选择要启动的服务:${NC}"
 echo "1) STUNServer"
@@ -110,6 +96,20 @@ if [ ! -d "$SERVICE_NAME" ]; then
     echo -e "${RED}错误: 本地目录 $SERVICE_NAME 不存在${NC}"
     exit 1
 fi
+
+# 如果环境变量中没有密码，则提示输入
+if [ -z "$SERVER_PASSWORD" ]; then
+    read -s -p "请输入服务器密码: " SERVER_PASSWORD
+    echo
+fi
+
+# 测试连接
+echo -e "${YELLOW}测试服务器连接...${NC}"
+if ! sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_PORT_OPTION $SERVER "echo '连接成功'" &> /dev/null; then
+    echo -e "${RED}连接失败，请检查服务器地址和密码${NC}"
+    exit 1
+fi
+echo -e "${GREEN}连接成功${NC}"
 
 # 创建临时目录
 TEMP_DIR=$(mktemp -d)
