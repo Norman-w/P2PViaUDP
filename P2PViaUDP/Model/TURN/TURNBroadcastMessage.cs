@@ -18,7 +18,6 @@ public class TURNBroadcastMessage
 	public Guid Guid { get; init; }
 	/// <summary>
 	/// 客户端在TURN服务器中的公网信息
-	/// 当广播提及的客户端是一个全锥形的NAT并且广播说收到广播的人需要打洞,那么就用这个EndPoint来进行打洞
 	/// </summary>
 	public required IPEndPoint ClientSideEndPointToTURN { get; init; }
 	

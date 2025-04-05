@@ -30,6 +30,7 @@ public class Client2ClientP2PHolePunchingRequestMessage
 	private static MessageType MessageType => MessageType.P2PHolePunchingRequest;
 	private static uint DefaultMessageLength => 
 	4 + // MessageType
+	16 + // RequestId
 	4 + // SourceEndPoint.Address
 	4 + // SourceEndPoint.Port
 	4 + // DestinationEndPoint.Address
@@ -39,7 +40,9 @@ public class Client2ClientP2PHolePunchingRequestMessage
 	16 + // DestinationClientId
 	16 + // GroupId
 	8; // SendTime
-	//= 80
+	//= 96;
+	
+	public Guid RequestId { get; init; }
 	
 	/// <summary>
 	/// 谁发起的打洞,并不是本条消息是谁发送的,这个不一定是有值的,因为对称型NAT在开始打洞的时候并不知道自己的端口信息
@@ -74,6 +77,7 @@ public class Client2ClientP2PHolePunchingRequestMessage
 	{
 		var bytesList = new List<byte>();
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
+		bytesList.AddRange(RequestId.ToByteArray());
 		var sourceEndPoint = SourceEndPoint ?? new IPEndPoint(IPAddress.Any, 0);
 		bytesList.AddRange(sourceEndPoint.Address.GetAddressBytes());
 		bytesList.AddRange(BitConverter.GetBytes(sourceEndPoint.Port));
@@ -99,15 +103,20 @@ public class Client2ClientP2PHolePunchingRequestMessage
 		{
 			throw new ArgumentException("消息类型不匹配");
 		}
-		var sourceEndPoint =
-			new IPEndPoint(new IPAddress(bytes.Skip(4).Take(4).ToArray()), BitConverter.ToInt32(bytes, 8));
-		var destinationEndPoint =
-			new IPEndPoint(new IPAddress(bytes.Skip(12).Take(4).ToArray()), BitConverter.ToInt32(bytes, 16));
-		var sourceNatType = (NATTypeEnum)BitConverter.ToInt32(bytes, 20);
-		var sourceClientId = new Guid(bytes.Skip(24).Take(16).ToArray());
-		var destinationClientId = new Guid(bytes.Skip(40).Take(16).ToArray());
-		var groupId = new Guid(bytes.Skip(56).Take(16).ToArray());
-		var sendTime = new DateTime(BitConverter.ToInt64(bytes, 72));
+		var requestId = new Guid(bytes.Skip(4).Take(16).ToArray());
+		var sourceEndPointAddress = new IPAddress(bytes.Skip(20).Take(4).ToArray());
+		var sourceEndPointPort = BitConverter.ToInt32(bytes, 24);
+		var sourceEndPoint = new IPEndPoint(sourceEndPointAddress, sourceEndPointPort);
+		var destinationEndPointAddress = new IPAddress(bytes.Skip(28).Take(4).ToArray());
+		var destinationEndPointPort = BitConverter.ToInt32(bytes, 32);
+		var destinationEndPoint = new IPEndPoint(destinationEndPointAddress, destinationEndPointPort);
+		var sourceNatType = (NATTypeEnum)BitConverter.ToInt32(bytes, 36);
+		var sourceClientId = new Guid(bytes.Skip(40).Take(16).ToArray());
+		var destinationClientId = new Guid(bytes.Skip(56).Take(16).ToArray());
+		var groupId = new Guid(bytes.Skip(72).Take(16).ToArray());
+		var sendTimeTicks = BitConverter.ToInt64(bytes, 88);
+		var sendTime = new DateTime(sendTimeTicks);
+		// 这里的时间是发送的时间,不是接收的时间
 		return new Client2ClientP2PHolePunchingRequestMessage(
 			groupId,
 			destinationEndPoint, 
@@ -117,6 +126,7 @@ public class Client2ClientP2PHolePunchingRequestMessage
 			sourceEndPoint
 			)
 		{
+			RequestId = requestId,
 			SendTime = sendTime
 		};
 	}

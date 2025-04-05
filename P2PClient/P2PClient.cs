@@ -257,8 +257,10 @@ public class P2PClient
 			// 从字节数组中解析P2P打洞消息
 			var holePunchingMessageFromOtherClient = Client2ClientP2PHolePunchingRequestMessage.FromBytes(data);
 			Console.ForegroundColor = ConsoleColor.DarkYellow;
+			// 消息ID前几位
+			var messageId = holePunchingMessageFromOtherClient.RequestId.ToString()[..8];
 			Console.WriteLine(
-				$"收到P2P打洞消息，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {messageSenderEndPoint}的客户端");
+				$"收到P2P打洞消息{messageId}，来自TURN服务器中地址标记为{holePunchingMessageFromOtherClient.SourceEndPoint}的 实际端口为: {messageSenderEndPoint}的客户端");
 			Console.ResetColor();
 			// 他要跟我打洞,我看我这边记录没有记录他的信息,如果没记录则记录一下,如果记录了则更新他的端点的相关信息
 			var peerId = holePunchingMessageFromOtherClient.SourceClientId;
@@ -424,7 +426,10 @@ public class P2PClient
 			_myNATType,
 			_clientId,
 			_myEndPointFromMainStunSecondPortReply
-		);
+		)
+		{
+			RequestId = Guid.NewGuid(),
+		};
 
 		//加入到PeerClient集合中
 		if (!_peerClients.TryGetValue(broadcastMessage.Guid, out var peer))
@@ -454,6 +459,9 @@ public class P2PClient
 
 	private void ContinuousSendP2PHeartbeatMessagesAsync(IPEndPoint sendHeartbeatMessageTo)
 	{
+		Console.ForegroundColor = ConsoleColor.Red;
+		Console.WriteLine("正在启动心跳进程,请稍等...");
+		Console.ResetColor();
 		//如果这个客户端已经跟我建立起来正常连接并且已启动发送心跳进程了,则不再需要新开了
 		if (_peerClients.Any(
 			    x => x.Key == _clientId
@@ -513,7 +521,10 @@ public class P2PClient
 
 				var messageBytes = message.ToBytes();
 				await _udpClient.SendAsync(messageBytes, messageBytes.Length, message.DestinationEndPoint);
-				Console.WriteLine($"P2P打洞消息已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
+				var messageId = message.RequestId.ToString()[..8];
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine($"我发出的P2P打洞消息 {messageId} 已经由{message.SourceEndPoint}发送到{message.DestinationEndPoint}");
+				Console.ResetColor();
 			}
 			catch (Exception ex)
 			{

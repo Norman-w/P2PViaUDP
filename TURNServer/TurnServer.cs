@@ -3,6 +3,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using P2PViaUDP.Model;
 using P2PViaUDP.Model.TURN;
 
@@ -179,30 +180,31 @@ public class TurnServer
 	{
 		try
 		{
-			Console.WriteLine($"收到数据 来自: {remoteEndPoint}");
-			Console.WriteLine($"数据长度: {data.Length}");
-			Console.WriteLine($"原始数据: {BitConverter.ToString(data)}");
-
-			var message = TURNRegisterMessage.FromBytes(data);
-
-			Console.WriteLine($"解析后消息:");
-			Console.WriteLine($"Guid: {message.Guid}");
-			Console.WriteLine($"EndPoint: {message.EndPoint}");
-			Console.WriteLine($"GroupGuid: {message.GroupGuid}");
+			var clientRegisterToTURNMessage = TURNRegisterMessage.FromBytes(data);
+			//客户端说自己的公网地址是xx,这个客户端给我发消息的时候的公网地址是yy,他的公网是否有变化?
+			var isThisClientNATInfoConsistent =
+				clientRegisterToTURNMessage.EndPoint.Address.Equals(remoteEndPoint.Address) && clientRegisterToTURNMessage.EndPoint.Port == remoteEndPoint.Port;
+			Console.ForegroundColor = isThisClientNATInfoConsistent
+				? ConsoleColor.Green
+				: ConsoleColor.Red;
+			Console.WriteLine(
+				$"收到客户端{clientRegisterToTURNMessage.Guid}的注册消息, 他自爆的公网地址是: {clientRegisterToTURNMessage.EndPoint}, 实际上他的公网地址是: {remoteEndPoint}, 是否一致: {isThisClientNATInfoConsistent}");
+			Console.ResetColor();
 			
-			UpdateClientActivity(message.Guid);
+			
+			UpdateClientActivity(clientRegisterToTURNMessage.Guid);
 
-			if (_groupDict.TryGetValue(message.GroupGuid, out var group))
+			if (_groupDict.TryGetValue(clientRegisterToTURNMessage.GroupGuid, out var group))
 			{
 				var newClient = new TURNClient
 				{
 					EndPointFromTURN = remoteEndPoint,
-					Guid = message.Guid, NATType = message.DetectedNATType ?? NATTypeEnum.Unknown
+					Guid = clientRegisterToTURNMessage.Guid, NATType = clientRegisterToTURNMessage.DetectedNATType ?? NATTypeEnum.Unknown
 				};
 				group.Add(newClient);
 
-				Console.WriteLine($"客户端 {message.Guid} 已加入组 {message.GroupGuid}");
-				BroadcastToGroup(message, group);
+				Console.WriteLine($"客户端 {clientRegisterToTURNMessage.Guid} 已加入组 {clientRegisterToTURNMessage.GroupGuid}");
+				BroadcastToGroup(clientRegisterToTURNMessage, group);
 			}
 		}
 		catch (Exception ex)
@@ -211,7 +213,7 @@ public class TurnServer
 		}
 	}
 
-	private void BroadcastToGroup(TURNRegisterMessage newClient, List<TURNClient> group)
+	private void BroadcastToGroup(TURNRegisterMessage clientRegisterToTURNMessage, List<TURNClient> group)
 	{
 		/*
 
@@ -224,9 +226,9 @@ public class TurnServer
 
 
 */
-		Console.WriteLine($"向组内其他早期已经存在的客户端广播新客户端 {newClient.Guid}, 共 {group.Count - 1} 个");
-		var thisNewClient = group.First(c => c.Guid == newClient.Guid);
-		var groupOtherClientsWithoutThisNewClient = group.Where(c => c.Guid != newClient.Guid).ToList();
+		Console.WriteLine($"向组内其他早期已经存在的客户端广播新客户端 {clientRegisterToTURNMessage.Guid}, 共 {group.Count - 1} 个");
+		var thisNewClient = group.First(c => c.Guid == clientRegisterToTURNMessage.Guid);
+		var groupOtherClientsWithoutThisNewClient = group.Where(c => c.Guid != clientRegisterToTURNMessage.Guid).ToList();
 		foreach (var existInGroupEarlierClient in groupOtherClientsWithoutThisNewClient)
 		{
 			try
@@ -244,11 +246,15 @@ public class TurnServer
 					continue;
 				}
 
+				var consoleMessage = new StringBuilder("TURN服务器对👴🌺客户端");
+				consoleMessage.AppendLine($" {existInGroupEarlierClient.Guid} 说:");
+				consoleMessage.AppendLine($"你去,从你的端口 {existInGroupEarlierClient.EndPointFromTURN.Port} 向新客户端 {thisNewClient.Guid} 的端口 {thisNewClient.EndPointFromTURN.Port} 打洞");
+				Console.WriteLine(consoleMessage.ToString());
 				var broadcast = new TURNBroadcastMessage
 				{
 					ClientSideEndPointToTURN = thisNewClient.EndPointFromTURN,
 					Guid = thisNewClient.Guid,
-					GroupGuid = newClient.GroupGuid,
+					GroupGuid = clientRegisterToTURNMessage.GroupGuid,
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, existInGroupEarlierClient.EndPointFromTURN);
@@ -279,16 +285,20 @@ public class TurnServer
 					Console.ResetColor();
 					continue;
 				}
+				
+				var consoleMessage = new StringBuilder("TURN服务器对👶🍃客户端");
+				consoleMessage.AppendLine($" {thisNewClient.Guid} 说:");
+				consoleMessage.AppendLine($"你去,从你的端口 {thisNewClient.EndPointFromTURN.Port} 向早期加入的客户端 {existInGroupEarlierClient.Guid} 的端口 {existInGroupEarlierClient.EndPointFromTURN.Port} 打洞");
+				Console.WriteLine(consoleMessage.ToString());
 
 				var broadcast = new TURNBroadcastMessage
 				{
 					ClientSideEndPointToTURN = existInGroupEarlierClient.EndPointFromTURN,
 					Guid = existInGroupEarlierClient.Guid,
-					GroupGuid = newClient.GroupGuid,
+					GroupGuid = clientRegisterToTURNMessage.GroupGuid,
 				};
 				var data = broadcast.ToBytes();
 				_udpServer.Send(data, data.Length, thisNewClient.EndPointFromTURN);
-				Console.WriteLine($"广播已发送到 {thisNewClient.Guid}, 经由 {thisNewClient.EndPointFromTURN}");
 			}
 			catch (Exception ex)
 			{
