@@ -190,7 +190,7 @@ public class P2PClient
 				await ProcessP2PHolePunchingRequestMessageAsync(data, messageSenderEndPoint);
 				break;
 			case MessageType.P2PHeartbeat:
-				await ProcessP2PHeartbeatMessageAsync(data);
+				await ProcessP2PHeartbeatMessageAsync(data, messageSenderEndPoint);
 				break;
 			case MessageType.StunRequest:
 			case MessageType.StunResponse:
@@ -225,13 +225,14 @@ public class P2PClient
 
 	#region 处理接收到的心跳消息
 
-	private Task ProcessP2PHeartbeatMessageAsync(byte[] data)
+	private Task ProcessP2PHeartbeatMessageAsync(byte[] data, IPEndPoint messageSenderIPEndPoint)
 	{
 		try
 		{
 			// 从字节数组中解析P2P心跳消息
 			var heartbeatMessage = P2PHeartbeatMessage.FromBytes(data);
-			Console.WriteLine($"收到P2P心跳消息，来自: {heartbeatMessage.SenderId}");
+			var senderIdShort = heartbeatMessage.SenderId.ToString()[..8];
+			Console.WriteLine($"收到P2P心跳消息，来自: {senderIdShort} 的NAT:{messageSenderIPEndPoint}");
 
 			// 线程安全地更新对方的心跳时间
 			lock (_peerClientsLock)
