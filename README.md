@@ -96,20 +96,11 @@ https://info.support.huawei.com/info-finder/encyclopedia/zh/NAT.html
   * 端口限制型NAT:🧮
 * 对称型NAT:🛡
 
-运行测试客户端的sh脚本前请:
-```bash
-chmod +x run-docker.sh
-```
-再
-```bash
-./run-test-p2p-client-in-docker.sh
-```
-
 全锥形网络的拓扑参考:
 ```bash
 d2 --watch udp-nat-p2p.d2
 ```
-但是请注意在多数网络中运行时他并不一定能够起作用，因为大多数网络都是对称NAT，而不是全锥形NAT。
+但是请注意在多数网络中运行时他并不一定能够起作用，因为大多数网络都是对称NAT/端口受限/IP受限，而不是全锥形NAT。
 - [x] 在127.0.0.1环境下完全正常工作
 - [x] STUN & TURN服务器在正式环境,两个客户机在同一个开发电脑正常工作(中国电信宽带)
 - [x] 两个STUN服务端在不同的服务器,两个客户端在不同的网络环境下可正常检测出客户端为全锥形NAT
