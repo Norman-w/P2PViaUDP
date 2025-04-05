@@ -21,11 +21,11 @@ public partial class Client2ClientP2PHolePunchingResponseMessage
 	16 + // GroupId
 	8; // SendTime
 	//= 76
-	public required IPEndPoint ActiveClientEndPoint { get; init; }
-	public required IPEndPoint PassiveClientEndPoint { get; init; }
-	public NATTypeEnum PassiveClientNATTye { get; init; }
-	public Guid ActiveClientId { get; init; }
-	public Guid PassiveClientId { get; init; }
+	public required IPEndPoint RequestSenderEndPoint { get; init; }
+	public required IPEndPoint RequestReceiverEndPoint { get; init; }
+	public NATTypeEnum RequestReceiverNATTye { get; init; }
+	public Guid RequestSenderClientId { get; init; }
+	public Guid RequestReceiverClientId { get; init; }
 	public Guid GroupId { get; init; }
 	public DateTime SendTime { get; init; }
 }
@@ -35,13 +35,13 @@ public partial class Client2ClientP2PHolePunchingResponseMessage
 	{
 		var bytesList = new List<byte>();
 		bytesList.AddRange(BitConverter.GetBytes((int)MessageType));
-		bytesList.AddRange(ActiveClientEndPoint.Address.GetAddressBytes());
-		bytesList.AddRange(BitConverter.GetBytes(ActiveClientEndPoint.Port));
-		bytesList.AddRange(PassiveClientEndPoint.Address.GetAddressBytes());
-		bytesList.AddRange(BitConverter.GetBytes(PassiveClientEndPoint.Port));
-		bytesList.AddRange(BitConverter.GetBytes((int)PassiveClientNATTye));
-		bytesList.AddRange(ActiveClientId.ToByteArray());
-		bytesList.AddRange(PassiveClientId.ToByteArray());
+		bytesList.AddRange(RequestSenderEndPoint.Address.GetAddressBytes());
+		bytesList.AddRange(BitConverter.GetBytes(RequestSenderEndPoint.Port));
+		bytesList.AddRange(RequestReceiverEndPoint.Address.GetAddressBytes());
+		bytesList.AddRange(BitConverter.GetBytes(RequestReceiverEndPoint.Port));
+		bytesList.AddRange(BitConverter.GetBytes((int)RequestReceiverNATTye));
+		bytesList.AddRange(RequestSenderClientId.ToByteArray());
+		bytesList.AddRange(RequestReceiverClientId.ToByteArray());
 		bytesList.AddRange(GroupId.ToByteArray());
 		bytesList.AddRange(BitConverter.GetBytes(SendTime.Ticks));
 		var bytes = bytesList.ToArray();
@@ -74,11 +74,11 @@ public partial class Client2ClientP2PHolePunchingResponseMessage
 
 		return new Client2ClientP2PHolePunchingResponseMessage
 		{
-			ActiveClientEndPoint = activeClientEndPoint,
-			PassiveClientEndPoint = passiveClientEndPoint,
-			PassiveClientNATTye = passiveClientNATTye,
-			ActiveClientId = activeClientId,
-			PassiveClientId = passiveClientId,
+			RequestSenderEndPoint = activeClientEndPoint,
+			RequestReceiverEndPoint = passiveClientEndPoint,
+			RequestReceiverNATTye = passiveClientNATTye,
+			RequestSenderClientId = activeClientId,
+			RequestReceiverClientId = passiveClientId,
 			GroupId = groupId,
 			SendTime = sendTime
 		};

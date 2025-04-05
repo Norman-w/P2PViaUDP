@@ -234,7 +234,7 @@ public class TurnServer
 				if (!DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 					    existInGroupEarlierClient,
 					    thisNewClient,
-					    out var active,
+					    out _,
 					    out _,
 					    out var errorMessage))
 				{
@@ -248,8 +248,6 @@ public class TurnServer
 				{
 					ClientSideEndPointToTURN = thisNewClient.EndPointFromTURN,
 					Guid = thisNewClient.Guid,
-					IsNeedPrepareAcceptIncomingConnectionForThisClient = active == existInGroupEarlierClient,
-					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient = active != existInGroupEarlierClient,
 					GroupGuid = newClient.GroupGuid,
 				};
 				var data = broadcast.ToBytes();
@@ -272,7 +270,7 @@ public class TurnServer
 				if (!DecideWhichIsActiveAndWhichIsPassiveWhenHolePunching(
 					    existInGroupEarlierClient,
 					    thisNewClient,
-					    out var active,
+					    out _,
 					    out _,
 					    out var errorMessage))
 				{
@@ -282,17 +280,10 @@ public class TurnServer
 					continue;
 				}
 
-				var isNeedPrepareAcceptIncomingConnectionForThisClient = active == thisNewClient;
-				var isNeedWaitForPrepareAcceptIncomingConnectionForThisClient =
-					!isNeedPrepareAcceptIncomingConnectionForThisClient;
 				var broadcast = new TURNBroadcastMessage
 				{
 					ClientSideEndPointToTURN = existInGroupEarlierClient.EndPointFromTURN,
 					Guid = existInGroupEarlierClient.Guid,
-					IsNeedPrepareAcceptIncomingConnectionForThisClient =
-						isNeedPrepareAcceptIncomingConnectionForThisClient,
-					IsNeedWaitForPrepareAcceptIncomingConnectionForThisClient =
-						isNeedWaitForPrepareAcceptIncomingConnectionForThisClient,
 					GroupGuid = newClient.GroupGuid,
 				};
 				var data = broadcast.ToBytes();

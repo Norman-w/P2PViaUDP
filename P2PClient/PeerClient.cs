@@ -5,6 +5,16 @@ namespace P2PClient;
 public partial class PeerClient
 {
 	/// <summary>
+	/// 首次P2P可用时间 要求是在SendHolePunchMessageToHimTime和ReceivedHolePunchMessageFromHimTime都不为null的情况下
+	/// </summary>
+	public DateTime? FirstP2PAvailableTime =>
+		ReceivedHolePunchMessageFromHimTime != null && SendHolePunchMessageToHimTime != null
+			? ReceivedHolePunchMessageFromHimTime > SendHolePunchMessageToHimTime
+				? ReceivedHolePunchMessageFromHimTime
+				: SendHolePunchMessageToHimTime
+			: null;
+	
+	/// <summary>
 	/// 判断是否已经建立了P2P
 	/// </summary>
 	public bool IsP2PHasBeenEstablished => FirstP2PAvailableTime != null;
@@ -29,7 +39,17 @@ public partial class PeerClient
 	/// 他的公网信息
 	/// </summary>
 	public IPEndPoint EndPoint { get; set; }
-
+	
+	/// <summary>
+	/// 从对方接收到打洞消息的时间
+	/// </summary>
+	public DateTime? ReceivedHolePunchMessageFromHimTime { get; init; }
+	
+	/// <summary>
+	/// 我给他发送打洞消息的时间
+	/// </summary>
+	public DateTime? SendHolePunchMessageToHimTime { get; set; }
+	
 	/// <summary>
 	/// 最后一次我发给他的心跳时间,如果还没发过则为null
 	/// </summary>
@@ -49,9 +69,4 @@ public partial class PeerClient
 	/// 最后一次我发送给他的时间,如果还没发送过则为null
 	/// </summary>
 	public DateTime? LastSendTime { get; set; }
-
-	/// <summary>
-	/// 首次P2P可用时间,我给他发过消息并且他也给我回过心跳的第一次设置一整个时间
-	/// </summary>
-	public DateTime? FirstP2PAvailableTime { get; set; }
 }
