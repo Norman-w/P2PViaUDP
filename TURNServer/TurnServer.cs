@@ -106,8 +106,24 @@ public class TurnServer
 		await Task.WhenAll(tasks);
 
 		// 添加额外的阻塞机制，防止服务器退出
-		Console.WriteLine("服务器已启动，按任意键停止服务...");
-		Console.ReadKey();
+		Console.WriteLine("服务器已启动，输入stop回车后停止服务或者使用Ctrl+C");
+		while (_isRunning)
+		{
+			var stopCommand = Console.ReadLine();
+			if (stopCommand?.ToLower() == "stop")
+			{
+				_isRunning = false;
+				_cts.Cancel();
+				Console.WriteLine("服务器正在关闭...");
+				_udpServer.Close();
+				_natTypeConsistencyKeepingCheckingServer.Close();
+				Console.WriteLine("服务器已关闭");
+			}
+			else
+			{
+				Console.WriteLine("输入无效，服务器将继续运行");
+			}
+		}
 	}
 
 	private async Task ReceiveMainServerMessagesAsync()

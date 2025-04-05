@@ -90,9 +90,21 @@ public class P2PClient
 				return;
 			}
 
-			//等待用户退出
-			Console.WriteLine("按任意键退出...");
-			Console.ReadKey();
+			while (_isRunning)
+			{
+				//等待用户退出
+				Console.WriteLine("输入stop或Ctrl+C退出");
+				var input = Console.ReadLine();
+				if (input != null && input.Equals("stop", StringComparison.OrdinalIgnoreCase))
+				{
+					Stop();
+					Console.WriteLine("停止监听UDP消息...");
+				}
+				else
+				{
+					Console.WriteLine("输入错误,请重新输入");
+				}
+			}
 		}
 		catch (Exception ex)
 		{
