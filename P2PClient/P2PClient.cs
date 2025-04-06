@@ -626,8 +626,8 @@ public class P2PClient
 
 	private async Task SendHolePunchingMessageAsync(Client2ClientP2PHolePunchingRequestMessage message)
 	{
-		const int maxRetries = 1;
-		const int retryDelay = 300;
+		const int maxRetries = 15;
+		const int retryDelay = 999;
 
 		for (var i = 0; i < maxRetries; i++)
 		{
@@ -648,6 +648,21 @@ public class P2PClient
 				{
 					Console.WriteLine($"对方({message.DestinationClientId})已经跟我创建连接了,不需要再发送打洞消息了");
 					break;
+				}
+
+				if (i>0)//重新创建消息的副本
+				{
+					message = new Client2ClientP2PHolePunchingRequestMessage(
+						message.GroupId,
+						message.DestinationEndPoint,
+						message.SourceClientId,
+						message.SourceNatType,
+						message.DestinationClientId,
+						_myEndPointFromMainStunSecondPortReply
+					)
+					{
+						RequestId = Guid.NewGuid()
+					};
 				}
 
 				var messageBytes = message.ToBytes();
