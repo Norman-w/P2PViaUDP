@@ -239,6 +239,19 @@ public class P2PClient
 			{
 				if (_peerClients.TryGetValue(heartbeatMessage.SenderId, out var peer))
 				{
+					#region 如果他已经给我发送心跳包了但是我还没给他发过,则需要我再一次打洞,通常这说明我先打洞的,然后他能给我回应,但是由于我第一次打洞的消息实际上他没收到,只是在我这边的NAT上捅出一个窟窿,我们还需要再打一次
+
+					if (peer.LastHeartbeatToHim == null)
+					{
+						Console.ForegroundColor = ConsoleColor.Red;
+						Console.WriteLine($"对方({heartbeatMessage.SenderId})已经给我发送心跳包了,但是我还没给他发过,需要再打一次洞");
+						Console.ResetColor();
+						ContinuousSendP2PHeartbeatMessagesAsync(
+							heartbeatMessage.SenderId,
+							messageSenderIPEndPoint);
+					}
+
+					#endregion
 					if (peer.LastHeartbeatFromHim == DateTime.MinValue || peer.LastHeartbeatFromHim == null)
 					{
 						peer.LastHeartbeatFromHim = DateTime.Now;
@@ -379,14 +392,36 @@ public class P2PClient
 				Console.WriteLine($"对方({holePunchingResponseMessage.RequestReceiverClientId})已经跟我创建连接了,不需要再发送打洞响应消息了");
 				return Task.CompletedTask;
 			}
+			
+			#region 必要时更新我的出网信息
+			/*
+			 如果我是对称型NAT,我刚才发的请求到对方(全锥形或IP受限型)的链接中,对方会告诉我本次出网时的端口,我需要把这个端口更新到我自己的记录当中.
+			 注意⚠️:如果我是对称型NAT,但是对方是端口受限型,我是通常(端口变化无规律)是无法和对方打洞的,原因是:
+				若端口受限的主动发起连接,不知道对称NAT的的实际出网使用端口,无法打洞
+				若对称型的,知道对方(端口受限)的IP+端口,但是端口受限那一端需要[端口受限型之前请求过的端口]才能回应,所以需要端口受限型的先为对称型的开口子,但又不知道应该给对称型开到什么地方,所以陷入僵局无法打洞(除非有规律可预测)
+			 */
 
-			// 我是主动方,所以我发出去了打洞消息,才有响应消息
-			Console.WriteLine(
-				$"收到P2P打洞响应消息: {holePunchingResponseMessage}, 我实际打洞后跟他通讯的地址是: {holePunchingResponseMessage.RequestSenderEndPoint}, 他实际打洞后跟我通讯的地址是: {holePunchingResponseMessage.RequestReceiverEndPoint}");
+			if (_myNATType == NATTypeEnum.Symmetric
+			    && holePunchingResponseMessage.RequestReceiverNATTye
+				    is NATTypeEnum.FullCone
+				    or NATTypeEnum.RestrictedCone
+			   )
+			{
+				var oldEndPoint = _myEndPointFromMainStunSecondPortReply;
+				// 如果对方是全锥形或IP受限型的,则我可以更新我的出网端口
+				_myEndPointFromMainStunSecondPortReply = holePunchingResponseMessage.RequestSenderEndPoint;
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine(
+					$"我是对称型NAT🛡, 已更新我的出网端信息从 {oldEndPoint} 到 {holePunchingResponseMessage.RequestSenderEndPoint}");
+				Console.ResetColor();
+			}
+			else
+			{
+				Console.WriteLine($"不需要更新我的出网端口,当前NAT类型: {_myNATType}");
+			}
+			#endregion
 
-			Console.ForegroundColor = ConsoleColor.Magenta;
-			Console.WriteLine($"我是主动方,我之前已经发送过打洞请求,这是他给我的回应,所以我们已经打通了,下面开始给他发送心跳包");
-			Console.ResetColor();
+			
 			// 然后我开启一个新的线程去给她发送我的心跳包给他
 			ContinuousSendP2PHeartbeatMessagesAsync(
 				holePunchingResponseMessage.RequestSenderClientId,
@@ -518,8 +553,6 @@ public class P2PClient
 
 		// 使用锁来保证线程安全地检查和更新心跳状态
 		var shouldStartHeartbeat = false;
-		PeerClient peerToSendHeartbeat;
-
 		lock (_peerClientsLock)
 		{
 			// 查找对应的peer
