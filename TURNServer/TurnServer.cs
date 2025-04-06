@@ -57,16 +57,11 @@ public class TurnServer
 		{
 			// 清理不活跃的客户端
 			clients.RemoveAll(client => (now - client.LastActivityTime).TotalSeconds > CLIENT_TIMEOUT_SECONDS);
-			if (clients.Count == 0)
-			{
-				// 如果组内没有客户端了，告知组已经清空,我们先暂时不把组删掉
-				//TODO 后面会增加组如果不存在了(房间没人太久房间也没了)的逻辑
-				Console.WriteLine($"组 {groupGuid} 已经清空");
-			}
-			else
-			{
-				Console.WriteLine($"组 {groupGuid} 仍然存在, 当前客户端数量: {clients.Count}");
-			}
+			// 如果组内没有客户端了，告知组已经清空,我们先暂时不把组删掉
+			//TODO 后面会增加组如果不存在了(房间没人太久房间也没了)的逻辑
+			Console.WriteLine(clients.Count == 0
+				? $"组 {groupGuid} 已经清空"
+				: $"组 {groupGuid} 仍然存在, 当前客户端数量: {clients.Count}");
 		}
 	}
 
@@ -160,6 +155,9 @@ public class TurnServer
 
 	private void ProcessNATConsistencyCheckMessage(byte[] data, IPEndPoint remoteEndPoint)
 	{
+		Console.ForegroundColor = ConsoleColor.Cyan;
+		Console.WriteLine($"收到NAT一致性检查请求 来自: {remoteEndPoint}");
+		Console.ResetColor();
 		try
 		{
 			var messageType = (MessageType)BitConverter.ToInt32(data, 0);
@@ -172,9 +170,7 @@ public class TurnServer
 			var request = TURNCheckNATConsistencyRequest.FromBytes(data);
 			
 			UpdateClientActivity(request.ClientId);
-
-			Console.WriteLine($"收到NAT一致性检查请求 来自: {remoteEndPoint}");
-
+			
 			// 发送响应
 			var response = new TURNCheckNATConsistencyResponse
 			{
