@@ -24,7 +24,7 @@ fi
 
 # 设置端口号
 if [ "$SERVICE_NAME" == "STUNServer" ]; then
-    PORT=3478
+    PORT=3488
 elif [ "$SERVICE_NAME" == "TURNServer" ]; then
     PORT=3749
 else
